@@ -1,5 +1,15 @@
 {
     "files.associations": {
-        "uart.h": "c"
+        "uart.h": "c",
+        "btc_manage.h": "c",
+        "btc_hd.h": "c",
+        "esp_bt_device.h": "c",
+        "esp_bt.h": "c",
+        "sdkconfig.h": "c",
+        "esp_err.h": "c",
+        "gpio.h": "c",
+        "esp_task.h": "c",
+        "semphr.h": "c",
+        "queue.h": "c"
     }
 }
