@@ -11,5 +11,6 @@
         "esp_task.h": "c",
         "semphr.h": "c",
         "queue.h": "c"
-    }
+    },
+    "git.ignoreLimitWarning": true
 }

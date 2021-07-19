@@ -31,7 +31,7 @@
 #include "nvs_flash.h"
 #include "soc/rmt_reg.h"
 
-#define LED_GPIO 12
+#define LED_GPIO 2
 #define PIN_SEL (1ULL << LED_GPIO)
 
 #define PRO_CON 0x03
@@ -1242,10 +1242,6 @@ void app_main()
     // gpio_set_level(LED_GPIO, 0);
     const char *TAG = "app_main";
 
-    static esp_hidd_callbacks_t callbacks;
-    static esp_hidd_app_param_t app_param;
-    static esp_hidd_qos_param_t both_qos;
-    static esp_bt_cod_t class;
 
     xSemaphore = xSemaphoreCreateMutex();
 
@@ -1256,36 +1252,21 @@ void app_main()
     io_conf.pull_down_en = 0;
     io_conf.pull_up_en = 0;
     gpio_config(&io_conf);
-    // gap_callbacks = get_device_cb;
 
-    //一応名前とプロバイダーを純正と一緒にする
-    app_param.name = "Wireless Gamepad";
-    app_param.description = "Gamepad";
-    app_param.provider = "Nintendo";
-    // app_param.subclass = 0x002508;
-    app_param.subclass = 0x8;
-    app_param.desc_list = hid_descriptor;
-    app_param.desc_list_len = hid_descriptor_len;
-    memset(&both_qos, 0, sizeof(esp_hidd_qos_param_t));
 
-    callbacks.application_state_cb = application_cb;
-    callbacks.connection_state_cb = connection_cb;
-    callbacks.get_report_cb = get_report_cb;
-    callbacks.set_report_cb = set_report_cb;
-    callbacks.set_protocol_cb = set_protocol_cb;
-    callbacks.intr_data_cb = intr_data_cb;
-    callbacks.vc_unplug_cb = vc_unplug_cb;
-
+    static esp_bt_cod_t class;
     class.minor = 2;
     class.major = 5;
     class.service = 1;
 
     // set_bt_address(); 暂时唔用
 
-    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BLE));
-
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    esp_bt_mem_release(ESP_BT_MODE_BLE);
+    bt_cfg.mode = ESP_BT_MODE_CLASSIC_BT;
+    if (bt_cfg.bt_max_acl_conn <= 0) 
+        bt_cfg.bt_max_acl_conn = 3;
+    ESP_ERROR_CHECK(esp_bt_mem_release(ESP_BT_MODE_CLASSIC_BT));
+    // ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
     if ((ret = esp_bt_controller_init(&bt_cfg)) != ESP_OK)
     {
         ESP_LOGE(TAG, "initialize controller failed: %s\n", esp_err_to_name(ret));
@@ -1295,6 +1276,11 @@ void app_main()
     if ((ret = esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT)) != ESP_OK)
     {
         ESP_LOGE(TAG, "enable controller failed: %s\n", esp_err_to_name(ret));
+        while (1)
+        {
+            vTaskDelay(10000);
+        }
+        
         return;
     }
 
@@ -1312,8 +1298,30 @@ void app_main()
 
     esp_bt_gap_register_callback(esp_bt_gap_cb);
     ESP_LOGI(TAG, "setting hid parameters");
+    // gap_callbacks = get_device_cb;
+
+    static esp_hidd_app_param_t app_param;
+    //一応名前とプロバイダーを純正と一緒にする
+    app_param.name = "Wireless Gamepad";
+    app_param.description = "Gamepad";
+    app_param.provider = "Nintendo";
+    // app_param.subclass = 0x002508;
+    app_param.subclass = 0x8;
+    app_param.desc_list = hid_descriptor;
+    app_param.desc_list_len = hid_descriptor_len;
+    
+    static esp_hidd_qos_param_t both_qos;
+    memset(&both_qos, 0, sizeof(esp_hidd_qos_param_t));
     esp_hid_device_register_app(&app_param, &both_qos, &both_qos);
 
+    static esp_hidd_callbacks_t callbacks;
+    callbacks.application_state_cb = application_cb;
+    callbacks.connection_state_cb = connection_cb;
+    callbacks.get_report_cb = get_report_cb;
+    callbacks.set_report_cb = set_report_cb;
+    callbacks.set_protocol_cb = set_protocol_cb;
+    callbacks.intr_data_cb = intr_data_cb;
+    callbacks.vc_unplug_cb = vc_unplug_cb;
     ESP_LOGI(TAG, "starting hid device");
     esp_hid_device_init(&callbacks);
 
