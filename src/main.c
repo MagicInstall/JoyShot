@@ -862,6 +862,11 @@ void application_cb(esp_bd_addr_t bd_addr, esp_hidd_application_state_t state)
             ESP_LOGI(TAG, "bd_addr is null...");
             break;
         }
+        else
+        {
+            ESP_LOGI(TAG, "bd_addr OK");
+            break;
+        }
         break;
     default:
         ESP_LOGW(TAG, "unknown app state %i", state);
@@ -1158,9 +1163,13 @@ void print_bt_address()
     const uint8_t *bd_addr;
 
     bd_addr = esp_bt_dev_get_address();
-    ESP_LOGI(TAG, "my bluetooth address is %02X:%02X:%02X:%02X:%02X:%02X",
+    if (bd_addr != NULL) 
+    {
+        ESP_LOGI(TAG, "my bluetooth address is %02X:%02X:%02X:%02X:%02X:%02X",
              bd_addr[0], bd_addr[1], bd_addr[2], bd_addr[3], bd_addr[4],
              bd_addr[5]);
+       
+    }
 }
 
 #define SPP_TAG "tag"
@@ -1259,7 +1268,8 @@ void app_main()
     class.major = 5;
     class.service = 1;
 
-    // set_bt_address(); 暂时唔用
+    // set_bt_address();  暂时唔用
+    // print_bt_address();
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     bt_cfg.mode = ESP_BT_MODE_CLASSIC_BT;
@@ -1296,8 +1306,10 @@ void app_main()
         return;
     }
 
-    esp_bt_gap_register_callback(esp_bt_gap_cb);
-    ESP_LOGI(TAG, "setting hid parameters");
+    esp_bt_gap_register_callback(esp_bt_gap_cb); // 睇哩个函数同NR版嘅区别
+//  ----------  哩行之前已经 BT_HCI: command_timed_out with no commands pending response
+//              有断点长时间暂停先会出现
+    ESP_LOGI(TAG, "setting hid parameters"); // 哩句有执行
     // gap_callbacks = get_device_cb;
 
     static esp_hidd_app_param_t app_param;
