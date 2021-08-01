@@ -140,7 +140,7 @@ uint8_t *uart_data;
 
 void uart_init()
 {
-    uart_config.baud_rate = 9600;
+    uart_config.baud_rate = 115200;
     uart_config.data_bits = UART_DATA_8_BITS;
     uart_config.parity = UART_PARITY_DISABLE;
     uart_config.stop_bits = UART_STOP_BITS_1;
@@ -1172,17 +1172,18 @@ void print_bt_address()
     }
 }
 
-#define SPP_TAG "tag"
+#define SPP_TAG "spp_tag"
 static void esp_bt_gap_cb(esp_bt_gap_cb_event_t event,
                           esp_bt_gap_cb_param_t *param)
 {
     switch (event)
     {
-    case ESP_BT_GAP_DISC_RES_EVT:
+    case ESP_BT_GAP_DISC_RES_EVT:   //
         ESP_LOGI(SPP_TAG, "ESP_BT_GAP_DISC_RES_EVT");
         esp_log_buffer_hex(SPP_TAG, param->disc_res.bda, ESP_BD_ADDR_LEN);
+        // 哩度要做啲嘢? 参考handle_bt_device_result(&param->disc_res);
         break;
-    case ESP_BT_GAP_DISC_STATE_CHANGED_EVT:
+    case ESP_BT_GAP_DISC_STATE_CHANGED_EVT: //
         ESP_LOGI(SPP_TAG, "ESP_BT_GAP_DISC_STATE_CHANGED_EVT");
         break;
     case ESP_BT_GAP_RMT_SRVCS_EVT:
@@ -1207,8 +1208,12 @@ static void esp_bt_gap_cb(esp_bt_gap_cb_event_t event,
         }
         break;
     }
+    case ESP_BT_GAP_CONFIG_EIR_DATA_EVT:
+        ESP_LOGI(SPP_TAG, "ESP_BT_GAP_CONFIG_EIR_DATA_EVT");
+        break;
 
     default:
+        ESP_LOGE(SPP_TAG, "Unknow event:%d", event);
         break;
     }
 }
@@ -1230,14 +1235,14 @@ void app_main()
     //                         &ButtonsHandle, 1);
 
     // 暂时唔用
-    // //プロコン以外での利用を想定するなら必要かも
-    // //if (CONTROLLER_TYPE != PRO_CON) {
+    // // プロコン以外での利用を想定するなら必要かも
+    // // if (CONTROLLER_TYPE != PRO_CON) {
     // //  report30[2] += (0x3 << 1);
     // //  dummy[2] += (0x3 << 1);
-    // //}
-    // uart_init();
-    // xTaskCreatePinnedToCore(uart_task, "uart_task", 2048, NULL, 1, &ButtonsHandle,
-    //                         1);
+    // // }
+    uart_init();
+    // xTaskCreatePinnedToCore(uart_task, "uart_task", 2048, NULL, 1, &ButtonsHandle, 1);
+
     // // flash LED
     // vTaskDelay(100);
     // gpio_set_level(LED_GPIO, 0);
@@ -1273,8 +1278,8 @@ void app_main()
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     bt_cfg.mode = ESP_BT_MODE_CLASSIC_BT;
-    if (bt_cfg.bt_max_acl_conn <= 0) 
-        bt_cfg.bt_max_acl_conn = 3;
+    // if (bt_cfg.bt_max_acl_conn <= 0) 
+    //     bt_cfg.bt_max_acl_conn = 3;
     ESP_ERROR_CHECK(esp_bt_mem_release(ESP_BT_MODE_CLASSIC_BT));
     // ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
     if ((ret = esp_bt_controller_init(&bt_cfg)) != ESP_OK)
@@ -1283,14 +1288,10 @@ void app_main()
         return;
     }
 
+    // BTU_TASK
     if ((ret = esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT)) != ESP_OK)
     {
         ESP_LOGE(TAG, "enable controller failed: %s\n", esp_err_to_name(ret));
-        while (1)
-        {
-            vTaskDelay(10000);
-        }
-        
         return;
     }
 
@@ -1306,10 +1307,12 @@ void app_main()
         return;
     }
 
-    esp_bt_gap_register_callback(esp_bt_gap_cb); // 睇哩个函数同NR版嘅区别
-//  ----------  哩行之前已经 BT_HCI: command_timed_out with no commands pending response
-//              有断点长时间暂停先会出现
-    ESP_LOGI(TAG, "setting hid parameters"); // 哩句有执行
+    if ((ret = esp_bt_gap_register_callback(esp_bt_gap_cb)) != ESP_OK)
+    {
+        ESP_LOGE(TAG, "esp_bt_gap_register_callback failed: %d", ret);
+        return;
+    }
+    ESP_LOGI(TAG, "setting hid parameters");
     // gap_callbacks = get_device_cb;
 
     static esp_hidd_app_param_t app_param;
