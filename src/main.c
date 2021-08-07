@@ -30,6 +30,9 @@
 #include "driver/uart.h"
 #include "driver/periph_ctrl.h"
 
+#include "buttons.h"
+
+
 // #define LED_GPIO 25
 // #define PIN_SEL (1ULL << LED_GPIO)
 
@@ -256,6 +259,16 @@ static void uart_rx_task()
 
         ESP_LOGI(UART_TAG, "heap free: %d", xPortGetFreeHeapSize());
     }
+}
+
+
+static Button_Handle_t _button_0_handle;
+
+void _button_0_Callback (Button_Event_Mode val)
+{
+    ESP_LOGI("BTN 0", "%d", val);
+
+    keys_data.Capture = (val == Button_Event_On) ? 1 :0;
 }
 
 // static void rmt_tx_init()
@@ -1067,6 +1080,11 @@ void app_main()
     static esp_hidd_qos_param_t both_qos;
 
     xSemaphore = xSemaphoreCreateMutex();
+
+    Button_Config_t btn_config = Button_Default_Config(GPIO_NUM_0, _button_0_Callback);
+    _button_0_handle = Button_Enable(&btn_config);
+    if ( _button_0_handle == NULL)
+        ESP_LOGI("BUTTON", "Enable failed!");
 
     // gpio_config_t io_conf;
     // //disable interrupt
