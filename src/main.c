@@ -261,14 +261,25 @@ static void uart_rx_task()
     }
 }
 
-
 static Button_Handle_t _button_0_handle;
 
-void _button_0_Callback (Button_Event_Mode val)
+/// 按键 0 触发事件回调
+static void _button_0_Callback (Button_Event_Mode val)
 {
     ESP_LOGI("BTN 0", "%d", val);
-
-    keys_data.Capture = (val == Button_Event_On) ? 1 :0;
+    
+    // TODO: 脚本运行过程构想:
+    //  Step 0: 重置全部按键值;
+    //  Step 1: 按下运行 or 松开运行;
+    //  Step 2: 设置按键值;
+    //  Step 3: 延时;
+    //  Step 4: 重复 Step2 - Step3;
+    if (val == Button_Event_On) 
+    {
+        keys_data.Capture = 1;
+        vTaskDelay(1000 / portTICK_RATE_MS);
+        keys_data.Capture = 0;
+    } 
 }
 
 // static void rmt_tx_init()

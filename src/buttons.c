@@ -32,8 +32,8 @@ static void _btn_timer_cb(void *arg)
         {
             // 触发松开
             esp_timer_stop(btn->timer_handle);
-            btn->holding = false;
             btn->callback(Button_Event_Off);
+            btn->holding = false; // 在运行完callback 后才清除, 保证callback 能完成长时间运行的脚本!
         }
     }
     // 未触发按下
