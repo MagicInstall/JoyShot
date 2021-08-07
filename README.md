@@ -10,6 +10,10 @@ pio run -t menuconfig<br/>
 * 在系统终端打印串口（也可以在Pio 的终端）<br/>
 screen /dev/cu.usbserial-14401 115200,8,N,1<br/>
 
+* 在系统终端向串口发送控制命令（也可以在Pio 的终端）<br/>
+echo LR1 > /dev/cu.usbserial-14401<br/>
+具体命令在main.c 里定义。<br/>
+
 # 更新
 * 2021-07-18  Wing<br/>
 [魔改再魔改的IDF](https://github.com/MagicInstall/esp-idf-NathanReeves-pio.git)目前还未完成，虽然可以编译通过，但不能正常运行。
