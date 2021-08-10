@@ -264,13 +264,13 @@ static void uart_rx_task()
 static Button_Handle_t _button_0_handle;
 
 /// 按键 0 触发事件回调
-static void _button_0_Callback (Button_Event_Mode val)
+static void _button_0_Callback (Button_Event_t val)
 {
     ESP_LOGI("BTN 0", "%d", val);
     
     // TODO: 脚本运行过程构想:
     //  Step 0: 重置全部按键值;
-    //  Step 1: 按下运行 or 松开运行;
+    //  Step 1: 按下运行 or 松开运行, 区分JC(L)/JC(R)/Pro;
     //  Step 2: 设置按键值;
     //  Step 3: 延时;
     //  Step 4: 重复 Step2 - Step3;

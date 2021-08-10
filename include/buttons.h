@@ -20,25 +20,22 @@
 #endif
 
 #ifndef BUTTON_DEFAULT_DEBOUNCE           
-#define BUTTON_DEFAULT_DEBOUNCE     1  // ms
+#define BUTTON_DEFAULT_DEBOUNCE     1000  // us
 #endif
 
 #ifndef BUTTON_COUNT_MAX
-#define BUTTON_COUNT_MAX            2
+#define BUTTON_COUNT_MAX            2   // 驱动允许的最大按键数量
 #endif
 
 typedef enum { 
-    // Button_Event_Click           = 1,        // 单击
-    // Button_Event_LongPress       = 1 << 1,   // 长按
-    // Button_Event_SuperLongPress  = 1 << 2    // 超长按
     Button_Event_Off    = 0,
     Button_Event_On     = 1,
-} Button_Event_Mode;
+} Button_Event_t;
 
 /// 按键事件回调
 ///
 /// \param val      表示长短按
-typedef void (*Button_Event_Callback) (Button_Event_Mode val);
+typedef void (*Button_Event_Callback) (Button_Event_t val);
 
 /**
  * 初始化按键配置
@@ -47,7 +44,7 @@ typedef struct
 {
     gpio_num_t              gpio_num;       // 引脚号
     gpio_config_t           gpio_config;    // 引脚配置
-    Button_Event_Mode       click_mode;     // 捕捉哪些事件
+    // Button_Event_t       click_mode;     // 捕捉哪些事件
     Button_Event_Callback   callback;       // 事件回调
     UBaseType_t             priority;       // 回调线程的优先级
     const BaseType_t        core_id;        // 0 or 1, 回调线程在哪个核创建
@@ -78,8 +75,8 @@ typedef void* Button_Handle_t;
 /**
 * @brief        启动按键
 * @param[in]    config - 先用Button_IO_Default_Config() 载入默认配置
-* @return       - NULL : 按键启动失败;
-*               - !NULL : 有效的handle.
+* @return       NULL  - : 按键启动失败;
+*               other - : 有效的handle.
 */
 Button_Handle_t Button_Enable(Button_Config_t *config);
 
@@ -87,6 +84,8 @@ Button_Handle_t Button_Enable(Button_Config_t *config);
 
 /**
  * @brief   撤销按键
+ *              撤销后该按键的handle 变成无效, 不能再利用,
+ *              执行本函数后应将handle = NULL.
  * @param[in]   handle - 若要撤销指定的按键, 需要保留在启动按键Button_Enable()时返回的handle, 撤销时传入handle 以指定撤销哪个按键;
  *                     - 若要撤销全部按键, 传入Button_Disable_ALL.
  */
@@ -96,7 +95,8 @@ void Button_Disable(Button_Handle_t handle);
  *      在启用按键后可以切换事件回调
  * @param[in]   handle - 要切换回调的按键的handle.
  * @param[in]   cb     - 回调函数
+ * @return      ESP_OK - success, other - failed 
  */ 
-void Button_Set_Callback(Button_Handle_t handle, Button_Event_Callback cb);
+esp_err_t Button_Set_Callback(Button_Handle_t handle, Button_Event_Callback cb);
 
 #endif
