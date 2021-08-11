@@ -26,3 +26,7 @@ echo LR1 > /dev/cu.usbserial-14401<br/>
 * 在OTA 的HTTPS Server 上添加脚本加载（甚至在线编辑）功能；
 * P1-P4 LED；
 * 手柄颜色；
+
+# 参考
+[https://github.com/NathanReeves/BlueCubeMod](https://github.com/NathanReeves/BlueCubeMod)<br/>
+[https://github.com/elmagnificogi/NS_joycon_auto_script_esp32](https://github.com/elmagnificogi/NS_joycon_auto_script_esp32)<br/>
