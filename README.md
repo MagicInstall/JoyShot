@@ -15,5 +15,14 @@ echo LR1 > /dev/cu.usbserial-14401<br/>
 具体命令在main.c 里定义。<br/>
 
 # 更新
-* 2021-07-18  Wing<br/>
-[魔改再魔改的IDF](https://github.com/MagicInstall/esp-idf-NathanReeves-pio.git)目前还未完成，虽然可以编译通过，但不能正常运行。
+* <s>2021-07-18  Wing<br/>
+[魔改再魔改的IDF](https://github.com/MagicInstall/esp-idf-NathanReeves-pio.git)目前还未完成，虽然可以编译通过，但不能正常运行。</s>
+* 2021-08-11 Wing<br/>
+[魔改再魔改的IDF](https://github.com/MagicInstall/esp-idf-NathanReeves-pio.git)还有些问题未解决；目前可以连接上Switch，通过按键运行脚本。
+
+# 目标（按顺序）
+* Home 键唤醒Switch；
+* OTA；
+* 在OTA 的HTTPS Server 上添加脚本加载（甚至在线编辑）功能；
+* P1-P4 LED；
+* 手柄颜色；
