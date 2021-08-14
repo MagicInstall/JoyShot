@@ -30,3 +30,4 @@ echo LR1 > /dev/cu.usbserial-14401<br/>
 # 参考
 [https://github.com/NathanReeves/BlueCubeMod](https://github.com/NathanReeves/BlueCubeMod)<br/>
 [https://github.com/elmagnificogi/NS_joycon_auto_script_esp32](https://github.com/elmagnificogi/NS_joycon_auto_script_esp32)<br/>
+[https://github.com/mizuyoukanao/UARTSwitchCon](https://github.com/mizuyoukanao/UARTSwitchCon)<br/>
