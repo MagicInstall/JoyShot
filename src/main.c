@@ -27,11 +27,11 @@
 #include "driver/gpio.h"
 // #include "driver/rmt.h"
 // #include "soc/rmt_reg.h"
-#include "driver/uart.h"
 #include "driver/periph_ctrl.h"
 
 #include "ns_controller.h"
 #include "buttons.h"
+#include "uart_command.h"
 
 static const char *TAG = "Main";
 
@@ -65,8 +65,6 @@ static const char *TAG = "Main";
 // static uint8_t lt_send = 0;
 // static uint8_t rt_send = 0;
 
-static NS_Controller_Type_t _joy_type;
-static ns_button_status_t keys_data;
 
 // //RMT Transmitter Init - for reading GameCube controller
 // rmt_item32_t items[25];
@@ -74,291 +72,6 @@ static ns_button_status_t keys_data;
 
 // TaskHandle_t BlinkHandle = NULL;
 
-#define KEY_MASK_Y          0b00000001
-#define KEY_MASK_X          0b00000010
-#define KEY_MASK_B          0b00000100
-#define KEY_MASK_A          0b00001000
-#define KEY_MASK_Right_SR   0b00010000
-#define KEY_MASK_Right_SL   0b00100000
-#define KEY_MASK_R          0b01000000
-#define KEY_MASK_ZR         0b10000000
-#define KEY_MASK_Minus      (0b00000001 << 8)
-#define KEY_MASK_Plus       (0b00000010 << 8)
-#define KEY_MASK_R_Stick    (0b00000100 << 8)
-#define KEY_MASK_L_Stick    (0b00001000 << 8)
-#define KEY_MASK_Home       (0b00010000 << 8)
-#define KEY_MASK_Capture    (0b00100000 << 8)
-// #define KEY_MASK_R          (0b01000000 << 8)
-#define KEY_MASK_Char_Grip  (0b10000000 << 8)
-#define KEY_MASK_Down       (0b00000001 << 16)
-#define KEY_MASK_Up         (0b00000010 << 16)
-#define KEY_MASK_Right      (0b00000100 << 16)
-#define KEY_MASK_Left       (0b00001000 << 16)
-#define KEY_MASK_Left_SR    (0b00010000 << 16)
-#define KEY_MASK_Left_SL    (0b00100000 << 16)
-#define KEY_MASK_L          (0b01000000 << 16)
-#define KEY_MASK_ZL         (0b10000000 << 16)
-
-#define UART_SET_KEY(keys) {                                \
-    keys_data.button_status_1 |= keys & 0xFF;               \
-    keys_data.button_status_2 |= (keys & 0xFF00) >> 8;      \
-    keys_data.button_status_2 |= (keys & 0xFF0000) >> 16;   \
-}
-
-#define UART_RES_KEY(keys) {                                \
-    keys_data.button_status_1 &= ~(keys & 0xFF);            \
-    keys_data.button_status_2 &= ~((keys & 0xFF00) >> 8);   \
-    keys_data.button_status_2 &= ~((keys & 0xFF0000) >> 16);\
-}
-
-//いずれamiibo実装するならここ拡張するかも
-#define UART_BUF_SIZE   256
-#define UART_TAG        "UART_Task"
-QueueHandle_t uart_queue;
-
-static void uart_rx_task()
-{
-    uart_config_t uart_config = {
-        .baud_rate = 115200,
-        .data_bits = UART_DATA_8_BITS,
-        .parity    = UART_PARITY_DISABLE,
-        .stop_bits = UART_STOP_BITS_1,
-        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE
-    };
-    uart_param_config(UART_NUM_0, &uart_config);
-    uart_set_pin(UART_NUM_0, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
-    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, UART_BUF_SIZE * 2, UART_BUF_SIZE * 2, 10, &uart_queue, 0));
- 
-    // Configure a temporary buffer for the incoming data
-    uint8_t *data = (uint8_t *) malloc(UART_BUF_SIZE);
-    
-    uint32_t r_key = 0;
-    bool press = false;
-    while (1) {
-        // Read data from the UART
-        int len = uart_read_bytes(UART_NUM_0, data, UART_BUF_SIZE, 500 / portTICK_RATE_MS); // 用portMAX_DELAY 会等到buff 满才跳出阻塞 );
-        if (len < 2) continue;
-
-        // ESP_LOGI(UART_TAG, "%s", data);
-        r_key = 0;
-        press = false;
-        switch (data[0])
-        {
-        case 'y':
-        case 'Y':
-            switch (data[1])
-            {
-            case 'p': case 'P': r_key = KEY_MASK_Y; press = true;
-            case '1': keys_data.Y = 1; break;
-            case '0': keys_data.Y = 0; break;
-            default: ESP_LOGI(UART_TAG, "Y error: %c(0x%X)", data[1], data[1]); break;
-            }
-            break;
-        case 'x':
-        case 'X':
-            switch (data[1])
-            {
-            case 'p': case 'P': r_key = KEY_MASK_X; press = true;
-            case '1': keys_data.X = 1; break;
-            case '0': keys_data.X = 0; break;
-            default: ESP_LOGI(UART_TAG, "X error: %c(0x%X)", data[1], data[1]); break;
-            }
-            break;
-        case 'b':
-        case 'B':
-            switch (data[1])
-            {
-            case 'p': case 'P': r_key = KEY_MASK_B; press = true;
-            case '1': keys_data.B = 1; break;
-            case '0': keys_data.B = 0; break;
-            default: ESP_LOGI(UART_TAG, "B error: %c(0x%X)", data[1], data[1]); break;
-            }
-            break;
-        case 'a':
-        case 'A':
-            switch (data[1])
-            {
-            case 'p': case 'P': r_key = KEY_MASK_A; press = true;
-            case '1': keys_data.A = 1; break;
-            case '0': keys_data.A = 0; break;
-            default: ESP_LOGI(UART_TAG, "A error: %c(0x%X)", data[1], data[1]); break;
-            }
-            break;
-        case 'v':
-            switch (data[1])
-            {
-            case 'p': case 'P': r_key = KEY_MASK_Down; press = true;
-            case '1': keys_data.Down = 1; break;
-            case '0': keys_data.Down = 0; break;
-            default: ESP_LOGI(UART_TAG, "Down error: %c(0x%X)", data[1], data[1]); break;
-            }
-            break;
-        case '^':
-            switch (data[1])
-            {
-            case 'p': case 'P': r_key = KEY_MASK_Up; press = true;
-            case '1': keys_data.Up = 1; break;
-            case '0': keys_data.Up = 0; break;
-            default: ESP_LOGI(UART_TAG, "Up error: %c(0x%X)", data[1], data[1]); break;
-            }
-            break;
-        case '>':
-            switch (data[1])
-            {
-            case 'p': case 'P': r_key = KEY_MASK_Right; press = true;
-            case '1': keys_data.Right = 1; break;
-            case '0': keys_data.Right = 0; break;
-            default: ESP_LOGI(UART_TAG, "Right error: %c(0x%X)", data[1], data[1]); break;
-            }
-            break;
-        case '<':
-            switch (data[1])
-            {
-            case 'p': case 'P': r_key = KEY_MASK_Left; press = true;
-            case '1': keys_data.Left = 1; break;
-            case '0': keys_data.Left = 0; break;
-            default: ESP_LOGI(UART_TAG, "Left error: %c(0x%X)", data[1], data[1]); break;
-            }
-            break;
-        case 'h':
-        case 'H':
-            switch (data[1])
-            {
-            case 'p': case 'P': r_key = KEY_MASK_Home; press = true;
-            case '1': keys_data.Home = 1; break;
-            case '0': keys_data.Home = 0; break;
-            default: ESP_LOGI(UART_TAG, "Home error: %c(0x%X)", data[1], data[1]); break;
-            }
-            break;
-        case 'c':
-        case 'C':
-            switch (data[1])
-            {
-            case 'p': case 'P': r_key = KEY_MASK_Capture; press = true;
-            case '1': keys_data.Capture = 1; break;
-            case '0': keys_data.Capture = 0; break;
-            default: ESP_LOGI(UART_TAG, "Capture error: %c(0x%X)", data[1], data[1]); break;
-            }
-            break;
-        case 'l':
-        case 'L':
-            switch (data[1])
-            {
-            case 'p': case 'P': r_key = KEY_MASK_L; press = true;
-            case '1': keys_data.L = 1; break;
-            case '0': keys_data.L = 0; break;
-            case 'r':
-            case 'R':
-                switch (data[2])
-                {
-                case 'p': case 'P': 
-                    switch (_joy_type)
-                    {
-                    case Left_Joycon:  r_key = KEY_MASK_Left_SL | KEY_MASK_Left_SR; break;
-                    case Right_Joycon: r_key = KEY_MASK_Right_SL | KEY_MASK_Right_SR; break;
-                    case Switch_pro:   r_key = KEY_MASK_L | KEY_MASK_R; break;
-                    default: break;
-                    }
-                    press = true;
-                case '1': 
-                    switch (_joy_type)
-                    {
-                    case Left_Joycon:  keys_data.Left_SL = 1; keys_data.Left_SR = 1; break;
-                    case Right_Joycon: keys_data.Right_SL = 1; keys_data.Right_SR = 1; break;
-                    case Switch_pro:   keys_data.L = 1; keys_data.R = 1; break;
-                    default: break;
-                    }
-                    break;
-                case '0': 
-                    switch (_joy_type)
-                    {
-                    case Left_Joycon:  keys_data.Left_SL = 0; keys_data.Left_SR = 0; break;
-                    case Right_Joycon: keys_data.Right_SL = 0; keys_data.Right_SR = 0; break;
-                    case Switch_pro:   keys_data.L = 0; keys_data.R = 0; break;
-                    default: break;
-                    }
-                    break;
-                default: ESP_LOGI(UART_TAG, "L+R error: %c(0x%X)", data[2], data[2]); break;
-                }
-                break;
-            case 's':
-            case 'S':
-                switch (data[2])
-                {
-                case 'p': case 'P': r_key = KEY_MASK_L_Stick; press = true;
-                case '1': keys_data.LStick = 1; break;
-                case '0': keys_data.LStick = 0; break;
-                default: ESP_LOGI(UART_TAG, "L Stick error: %c(0x%X)", data[2], data[2]); break;
-                }
-                break;
-            default: ESP_LOGI(UART_TAG, "L error: %c(0x%X)", data[1], data[1]); break;
-            }
-            break;
-        case 'r':
-        case 'R':
-            switch (data[1])
-            {
-            case 'p': case 'P': r_key = KEY_MASK_R; press = true;
-            case '1': keys_data.Capture = 1; break;
-            case '0': keys_data.Capture = 0; break;
-            case 's':
-            case 'S':
-                switch (data[2])
-                {
-                case 'p': case 'P': r_key = KEY_MASK_R_Stick; press = true;
-                case '1': keys_data.RStick = 1; break;
-                case '0': keys_data.RStick = 0; break;
-                default: ESP_LOGI(UART_TAG, "R Stick error: %c(0x%X)", data[2], data[2]); break;
-                }
-                break;
-            default: ESP_LOGI(UART_TAG, "R error: %c(0x%X)", data[1], data[1]); break;
-            }
-            break;
-        
-        default:
-            ESP_LOGI(UART_TAG, "unknow commade: %c(0x%X)", data[0], data[0]);
-            break;
-        }
-
-        NS_Set_Buttons(&keys_data);
-
-        if (press) 
-        {
-            vTaskDelay(100);
-            UART_RES_KEY(r_key);
-            NS_Set_Buttons(&keys_data); 
-        }
-        ESP_LOGI(UART_TAG, "heap free: %d", xPortGetFreeHeapSize());
-    }
-}
-
-static Button_Handle_t _button_0_handle;
-
-/// 按键 0 触发事件回调
-static void _button_0_Callback (Button_Event_t val)
-{
-    ESP_LOGI("BTN 0", "%d", val);
-    
-    // TODO: 脚本运行过程构想:
-    //  Step 0: 重置全部按键值;
-    //  Step 1: 区分JC(L)/JC(R)/Pro
-    //  Step 2: 运行按下脚本
-    //  Step 2 - 1: 设置按键值;
-    //  Step 2 - 2: 延时;
-    //  Step 2 - 3: 重复 Step2 - 1 - Step2 - 2;
-    //  Step 2 - 4: 结束;
-    //  Step 3 : 运行松开脚本:
-    //  Step 3 - 1 ~ 4 同按下;
-    //  Step 4 结束
-    if (val == Button_Event_On) 
-    {   
-        keys_data.Capture = 1;
-        NS_Set_Buttons(&keys_data);
-        vTaskDelay(1000 / portTICK_RATE_MS);
-        keys_data.Capture = 0;
-        NS_Set_Buttons(&keys_data);
-    } 
-}
 
 // static void rmt_tx_init()
 // {
@@ -695,6 +408,38 @@ static void _button_0_Callback (Button_Event_t val)
 // static uint8_t reply02[] = {0x01, 0x40, 0x00, 0x00, 0x00, 0xe6, 0x27, 0x78, 0xab, 0xd7, 0x76, 0x00, 0x82, 0x02, 0x03, 0x48, 0x03, 0x02, 0xD8, 0xA0, 0x1D, 0x40, 0x15, 0x66, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 // Reply for REQUEST_DEVICE_INFO
 
+static NS_Controller_Type_t _joy_type;
+static ns_button_status_t keys_data;
+
+
+static Button_Handle_t _button_0_handle;
+
+/// 按键 0 触发事件回调
+static void _button_0_Callback (Button_Event_t val)
+{
+    ESP_LOGI("BTN 0", "%d", val);
+    
+    // TODO: 脚本运行过程构想:
+    //  Step 0: 重置全部按键值;
+    //  Step 1: 区分JC(L)/JC(R)/Pro
+    //  Step 2: 运行按下脚本
+    //  Step 2 - 1: 设置按键值;
+    //  Step 2 - 2: 延时;
+    //  Step 2 - 3: 重复 Step2 - 1 - Step2 - 2;
+    //  Step 2 - 4: 结束;
+    //  Step 3 : 运行松开脚本:
+    //  Step 3 - 1 ~ 4 同按下;
+    //  Step 4 结束
+    if (val == Button_Event_On) 
+    {   
+        keys_data.Capture = 1;
+        NS_Set_Buttons(&keys_data);
+        vTaskDelay(1000 / portTICK_RATE_MS);
+        keys_data.Capture = 0;
+        NS_Set_Buttons(&keys_data);
+    } 
+}
+
 /// 给NS_Open() 做状态标记
 static bool conneted = false;
 
@@ -715,6 +460,7 @@ void _wait_connet_task(void *param)
             _ns_controller_cb(NS_CONTROLLER_DISCONNECTED_EVT, NULL);
     }
 
+    ESP_LOGI("_wait_connet_task", "heap free: %d", xPortGetFreeHeapSize());
     vTaskDelete(NULL);
 }
 
@@ -782,7 +528,10 @@ void app_main()
     Button_Config_t btn_config = Button_Default_Config(GPIO_NUM_0, _button_0_Callback);
     _button_0_handle = Button_Enable(&btn_config);
     if ( _button_0_handle == NULL)
-        ESP_LOGI("BUTTON", "Enable failed!");
+        ESP_LOGI(TAG, "BUTTON Enable failed!");
+
+    // 启动串口0命令
+    UART_0_Rx_Start();
 
     // gpio_config_t io_conf;
     // //disable interrupt
@@ -801,7 +550,4 @@ void app_main()
 
     // //start blinking
     // xTaskCreate(startBlink, "blink_task", 1024, NULL, 1, &BlinkHandle);
-
-
-    xTaskCreatePinnedToCore(uart_rx_task, "uart_rx_task", 2048, NULL, 10, NULL, 1);
 }
