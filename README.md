@@ -19,13 +19,20 @@ echo LR1 > /dev/cu.usbserial-14401<br/>
 [魔改再魔改的IDF](https://github.com/MagicInstall/esp-idf-NathanReeves-pio.git)目前还未完成，虽然可以编译通过，但不能正常运行。</s>
 * 2021-08-11 Wing<br/>
 [魔改再魔改的IDF](https://github.com/MagicInstall/esp-idf-NathanReeves-pio.git)还有些问题未解决；目前可以连接上Switch，通过按键运行脚本。
+* 2021-08-25 Wing<br/>
+-- 特别感谢@elmagnificogi 的[解答](https://github.com/elmagnificogi/NS_joycon_auto_script_esp32/issues/1)!!!直接推进了进度!感谢!!!<br/>
+-- [魔改再魔改的IDF](https://github.com/MagicInstall/esp-idf-NathanReeves-pio.git)还有些问题未解决，主动连接NS 只是通过BTA 层实现，若NS 在关机状态下也可以连上但报错：<br/>
+(7147) BT_HIDD: hidd_l2cif_connect_cfm: connection failed, now disconnect<br/>
+(7147) BT_HIDD: hidd_conn_disconnect: already disconnected<br/>
+，感觉这个状况可能大概可以做home 键唤醒，但目前还没有头绪...；<br/>
+-- 蓝牙部分拆分到另一个文件，再包装了一层。
 
 # 目标（按顺序）
-* Home 键唤醒Switch；
 * OTA；
 * 在OTA 的HTTPS Server 上添加脚本加载（甚至在线编辑）功能；
-* P1-P4 LED；
-* 手柄颜色；
+* Home 键唤醒Switch；
+* ☑️P1-P4 LED；(一不小心解决了囧)
+* ☑️手柄颜色；(一不小心解决了囧)
 
 # 参考
 [https://github.com/NathanReeves/BlueCubeMod](https://github.com/NathanReeves/BlueCubeMod)<br/>
