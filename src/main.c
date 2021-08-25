@@ -6,23 +6,23 @@
 //
 
 #include "esp_log.h"
-#include "esp_hidd_api.h"
-#include "esp_bt_main.h"
-#include "esp_bt_device.h"
-#include "esp_bt.h"
+// #include "esp_hidd_api.h"
+// #include "esp_bt_main.h"
+// #include "esp_bt_device.h"
+// #include "esp_bt.h"
 #include "esp_err.h"
 #include "esp_system.h"
 #include "nvs.h"
 #include "nvs_flash.h"
-#include "esp_gap_bt_api.h"
+// #include "esp_gap_bt_api.h"
 #include <string.h>
 #include <inttypes.h>
 #include <math.h>
-#include "esp_timer.h"
+// #include "esp_timer.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/semphr.h"
+// #include "freertos/semphr.h"
 
 #include "driver/gpio.h"
 // #include "driver/rmt.h"
@@ -30,8 +30,10 @@
 #include "driver/uart.h"
 #include "driver/periph_ctrl.h"
 
+#include "ns_controller.h"
 #include "buttons.h"
 
+static const char *TAG = "Main";
 
 // #define LED_GPIO 25
 // #define PIN_SEL (1ULL << LED_GPIO)
@@ -45,81 +47,69 @@
 // #define RMT_TICK_10_US (80000000 / RMT_CLK_DIV / 100000) /*!< RMT counter value for 10 us.(Source clock is APB clock) */
 // #define rmt_item32_tIMEOUT_US 9500                       /*!< RMT receiver timeout value(us) */
 
-//Calibration
-static int lxcalib = 0;
-static int lycalib = 0;
-static int cxcalib = 0;
-static int cycalib = 0;
-static int lcalib = 0;
-static int rcalib = 0;
-//Buttons and sticks
-static uint8_t but1_send = 0;
-static uint8_t but2_send = 0;
-static uint8_t but3_send = 0;
-static uint8_t lx_send = 127;
-static uint8_t ly_send = 127;
-static uint8_t cx_send = 127;
-static uint8_t cy_send = 127;
-static uint8_t lt_send = 0;
-static uint8_t rt_send = 0;
+// //Calibration
+// static int lxcalib = 0;
+// static int lycalib = 0;
+// static int cxcalib = 0;
+// static int cycalib = 0;
+// static int lcalib = 0;
+// static int rcalib = 0;
+// //Buttons and sticks
+// static uint8_t but1_send = 0;
+// static uint8_t but2_send = 0;
+// static uint8_t but3_send = 0;
+// static uint8_t lx_send = 127;
+// static uint8_t ly_send = 127;
+// static uint8_t cx_send = 127;
+// static uint8_t cy_send = 127;
+// static uint8_t lt_send = 0;
+// static uint8_t rt_send = 0;
 
-typedef struct {
-    union {
-        struct 
-        {
-            bool Y          : 1;
-            bool X          : 1;
-            bool B          : 1;
-            bool A          : 1;
-            bool Right_SR   : 1;
-            bool Right_SL   : 1;
-            bool R          : 1;
-            bool ZR         : 1;
-        };
-        uint8_t button_status_1;
-    };
-    union {
-        struct 
-        {
-            bool Minus  : 1;
-            bool Plus   : 1;
-            bool RStick : 1;
-            bool LStick : 1;
-            bool Home   : 1;
-            bool Capture: 1;
-            bool        : 1; // Reserve
-            bool        : 1; // Charging Grip ?
-        };
-        uint8_t button_status_2;
-    };
-    union {
-        struct 
-        {
-            bool Down       : 1;
-            bool Up         : 1;
-            bool Right      : 1;
-            bool Left       : 1;
-            bool Left_SR    : 1;
-            bool Left_SL    : 1;
-            bool L          : 1;
-            bool ZL         : 1;
-        };
-        uint8_t button_status_3;
-    };        
-} keys_data_t;
-
-static keys_data_t keys_data;
+static NS_Controller_Type_t _joy_type;
+static ns_button_status_t keys_data;
 
 // //RMT Transmitter Init - for reading GameCube controller
 // rmt_item32_t items[25];
 // rmt_config_t rmt_tx;
 
-SemaphoreHandle_t xSemaphore;
-bool connected = false;
-int paired = 0;
-TaskHandle_t SendingHandle = NULL;
 // TaskHandle_t BlinkHandle = NULL;
-uint8_t timer = 0;
+
+#define KEY_MASK_Y          0b00000001
+#define KEY_MASK_X          0b00000010
+#define KEY_MASK_B          0b00000100
+#define KEY_MASK_A          0b00001000
+#define KEY_MASK_Right_SR   0b00010000
+#define KEY_MASK_Right_SL   0b00100000
+#define KEY_MASK_R          0b01000000
+#define KEY_MASK_ZR         0b10000000
+#define KEY_MASK_Minus      (0b00000001 << 8)
+#define KEY_MASK_Plus       (0b00000010 << 8)
+#define KEY_MASK_R_Stick    (0b00000100 << 8)
+#define KEY_MASK_L_Stick    (0b00001000 << 8)
+#define KEY_MASK_Home       (0b00010000 << 8)
+#define KEY_MASK_Capture    (0b00100000 << 8)
+// #define KEY_MASK_R          (0b01000000 << 8)
+#define KEY_MASK_Char_Grip  (0b10000000 << 8)
+#define KEY_MASK_Down       (0b00000001 << 16)
+#define KEY_MASK_Up         (0b00000010 << 16)
+#define KEY_MASK_Right      (0b00000100 << 16)
+#define KEY_MASK_Left       (0b00001000 << 16)
+#define KEY_MASK_Left_SR    (0b00010000 << 16)
+#define KEY_MASK_Left_SL    (0b00100000 << 16)
+#define KEY_MASK_L          (0b01000000 << 16)
+#define KEY_MASK_ZL         (0b10000000 << 16)
+
+#define UART_SET_KEY(keys) {                                \
+    keys_data.button_status_1 |= keys & 0xFF;               \
+    keys_data.button_status_2 |= (keys & 0xFF00) >> 8;      \
+    keys_data.button_status_2 |= (keys & 0xFF0000) >> 16;   \
+}
+
+#define UART_RES_KEY(keys) {                                \
+    keys_data.button_status_1 &= ~(keys & 0xFF);            \
+    keys_data.button_status_2 &= ~((keys & 0xFF00) >> 8);   \
+    keys_data.button_status_2 &= ~((keys & 0xFF0000) >> 16);\
+}
 
 //いずれamiibo実装するならここ拡張するかも
 #define UART_BUF_SIZE   256
@@ -142,20 +132,23 @@ static void uart_rx_task()
     // Configure a temporary buffer for the incoming data
     uint8_t *data = (uint8_t *) malloc(UART_BUF_SIZE);
     
-    bool success = false;
+    uint32_t r_key = 0;
+    bool press = false;
     while (1) {
         // Read data from the UART
-        int len = uart_read_bytes(UART_NUM_0, data, UART_BUF_SIZE, 500 / portTICK_RATE_MS);
+        int len = uart_read_bytes(UART_NUM_0, data, UART_BUF_SIZE, 500 / portTICK_RATE_MS); // 用portMAX_DELAY 会等到buff 满才跳出阻塞 );
         if (len < 2) continue;
 
         // ESP_LOGI(UART_TAG, "%s", data);
-        success = false;
+        r_key = 0;
+        press = false;
         switch (data[0])
         {
         case 'y':
         case 'Y':
             switch (data[1])
             {
+            case 'p': case 'P': r_key = KEY_MASK_Y; press = true;
             case '1': keys_data.Y = 1; break;
             case '0': keys_data.Y = 0; break;
             default: ESP_LOGI(UART_TAG, "Y error: %c(0x%X)", data[1], data[1]); break;
@@ -165,6 +158,7 @@ static void uart_rx_task()
         case 'X':
             switch (data[1])
             {
+            case 'p': case 'P': r_key = KEY_MASK_X; press = true;
             case '1': keys_data.X = 1; break;
             case '0': keys_data.X = 0; break;
             default: ESP_LOGI(UART_TAG, "X error: %c(0x%X)", data[1], data[1]); break;
@@ -174,6 +168,7 @@ static void uart_rx_task()
         case 'B':
             switch (data[1])
             {
+            case 'p': case 'P': r_key = KEY_MASK_B; press = true;
             case '1': keys_data.B = 1; break;
             case '0': keys_data.B = 0; break;
             default: ESP_LOGI(UART_TAG, "B error: %c(0x%X)", data[1], data[1]); break;
@@ -183,15 +178,53 @@ static void uart_rx_task()
         case 'A':
             switch (data[1])
             {
+            case 'p': case 'P': r_key = KEY_MASK_A; press = true;
             case '1': keys_data.A = 1; break;
             case '0': keys_data.A = 0; break;
             default: ESP_LOGI(UART_TAG, "A error: %c(0x%X)", data[1], data[1]); break;
+            }
+            break;
+        case 'v':
+            switch (data[1])
+            {
+            case 'p': case 'P': r_key = KEY_MASK_Down; press = true;
+            case '1': keys_data.Down = 1; break;
+            case '0': keys_data.Down = 0; break;
+            default: ESP_LOGI(UART_TAG, "Down error: %c(0x%X)", data[1], data[1]); break;
+            }
+            break;
+        case '^':
+            switch (data[1])
+            {
+            case 'p': case 'P': r_key = KEY_MASK_Up; press = true;
+            case '1': keys_data.Up = 1; break;
+            case '0': keys_data.Up = 0; break;
+            default: ESP_LOGI(UART_TAG, "Up error: %c(0x%X)", data[1], data[1]); break;
+            }
+            break;
+        case '>':
+            switch (data[1])
+            {
+            case 'p': case 'P': r_key = KEY_MASK_Right; press = true;
+            case '1': keys_data.Right = 1; break;
+            case '0': keys_data.Right = 0; break;
+            default: ESP_LOGI(UART_TAG, "Right error: %c(0x%X)", data[1], data[1]); break;
+            }
+            break;
+        case '<':
+            switch (data[1])
+            {
+            case 'p': case 'P': r_key = KEY_MASK_Left; press = true;
+            case '1': keys_data.Left = 1; break;
+            case '0': keys_data.Left = 0; break;
+            default: ESP_LOGI(UART_TAG, "Left error: %c(0x%X)", data[1], data[1]); break;
             }
             break;
         case 'h':
         case 'H':
             switch (data[1])
             {
+            case 'p': case 'P': r_key = KEY_MASK_Home; press = true;
             case '1': keys_data.Home = 1; break;
             case '0': keys_data.Home = 0; break;
             default: ESP_LOGI(UART_TAG, "Home error: %c(0x%X)", data[1], data[1]); break;
@@ -201,6 +234,7 @@ static void uart_rx_task()
         case 'C':
             switch (data[1])
             {
+            case 'p': case 'P': r_key = KEY_MASK_Capture; press = true;
             case '1': keys_data.Capture = 1; break;
             case '0': keys_data.Capture = 0; break;
             default: ESP_LOGI(UART_TAG, "Capture error: %c(0x%X)", data[1], data[1]); break;
@@ -210,14 +244,40 @@ static void uart_rx_task()
         case 'L':
             switch (data[1])
             {
+            case 'p': case 'P': r_key = KEY_MASK_L; press = true;
             case '1': keys_data.L = 1; break;
             case '0': keys_data.L = 0; break;
             case 'r':
             case 'R':
                 switch (data[2])
                 {
-                case '1': keys_data.L = 1; keys_data.R = 1; break;
-                case '0': keys_data.L = 0; keys_data.R = 0; break;
+                case 'p': case 'P': 
+                    switch (_joy_type)
+                    {
+                    case Left_Joycon:  r_key = KEY_MASK_Left_SL | KEY_MASK_Left_SR; break;
+                    case Right_Joycon: r_key = KEY_MASK_Right_SL | KEY_MASK_Right_SR; break;
+                    case Switch_pro:   r_key = KEY_MASK_L | KEY_MASK_R; break;
+                    default: break;
+                    }
+                    press = true;
+                case '1': 
+                    switch (_joy_type)
+                    {
+                    case Left_Joycon:  keys_data.Left_SL = 1; keys_data.Left_SR = 1; break;
+                    case Right_Joycon: keys_data.Right_SL = 1; keys_data.Right_SR = 1; break;
+                    case Switch_pro:   keys_data.L = 1; keys_data.R = 1; break;
+                    default: break;
+                    }
+                    break;
+                case '0': 
+                    switch (_joy_type)
+                    {
+                    case Left_Joycon:  keys_data.Left_SL = 0; keys_data.Left_SR = 0; break;
+                    case Right_Joycon: keys_data.Right_SL = 0; keys_data.Right_SR = 0; break;
+                    case Switch_pro:   keys_data.L = 0; keys_data.R = 0; break;
+                    default: break;
+                    }
+                    break;
                 default: ESP_LOGI(UART_TAG, "L+R error: %c(0x%X)", data[2], data[2]); break;
                 }
                 break;
@@ -225,6 +285,7 @@ static void uart_rx_task()
             case 'S':
                 switch (data[2])
                 {
+                case 'p': case 'P': r_key = KEY_MASK_L_Stick; press = true;
                 case '1': keys_data.LStick = 1; break;
                 case '0': keys_data.LStick = 0; break;
                 default: ESP_LOGI(UART_TAG, "L Stick error: %c(0x%X)", data[2], data[2]); break;
@@ -237,12 +298,14 @@ static void uart_rx_task()
         case 'R':
             switch (data[1])
             {
+            case 'p': case 'P': r_key = KEY_MASK_R; press = true;
             case '1': keys_data.Capture = 1; break;
             case '0': keys_data.Capture = 0; break;
             case 's':
             case 'S':
                 switch (data[2])
                 {
+                case 'p': case 'P': r_key = KEY_MASK_R_Stick; press = true;
                 case '1': keys_data.RStick = 1; break;
                 case '0': keys_data.RStick = 0; break;
                 default: ESP_LOGI(UART_TAG, "R Stick error: %c(0x%X)", data[2], data[2]); break;
@@ -257,6 +320,14 @@ static void uart_rx_task()
             break;
         }
 
+        NS_Set_Buttons(&keys_data);
+
+        if (press) 
+        {
+            vTaskDelay(100);
+            UART_RES_KEY(r_key);
+            NS_Set_Buttons(&keys_data); 
+        }
         ESP_LOGI(UART_TAG, "heap free: %d", xPortGetFreeHeapSize());
     }
 }
@@ -270,15 +341,22 @@ static void _button_0_Callback (Button_Event_t val)
     
     // TODO: 脚本运行过程构想:
     //  Step 0: 重置全部按键值;
-    //  Step 1: 按下运行 or 松开运行, 区分JC(L)/JC(R)/Pro;
-    //  Step 2: 设置按键值;
-    //  Step 3: 延时;
-    //  Step 4: 重复 Step2 - Step3;
+    //  Step 1: 区分JC(L)/JC(R)/Pro
+    //  Step 2: 运行按下脚本
+    //  Step 2 - 1: 设置按键值;
+    //  Step 2 - 2: 延时;
+    //  Step 2 - 3: 重复 Step2 - 1 - Step2 - 2;
+    //  Step 2 - 4: 结束;
+    //  Step 3 : 运行松开脚本:
+    //  Step 3 - 1 ~ 4 同按下;
+    //  Step 4 结束
     if (val == Button_Event_On) 
-    {
+    {   
         keys_data.Capture = 1;
+        NS_Set_Buttons(&keys_data);
         vTaskDelay(1000 / portTICK_RATE_MS);
         keys_data.Capture = 0;
+        NS_Set_Buttons(&keys_data);
     } 
 }
 
@@ -613,484 +691,93 @@ static void _button_0_Callback (Button_Event_t val)
 //     }
 // }
 
-//Switch button report example //         batlvl       Buttons              Lstick           Rstick
-//static uint8_t report30[] = {0x30, 0x00, 0x90,   0x00, 0x00, 0x00,   0x00, 0x00, 0x00,   0x00, 0x00, 0x00};
-static uint8_t report30[] = {
-    0x30,
-    0x0,
-    0x70, // 高4位: Battery level;(LSB最低位=Charging, 1-3位 8=full, 6=medium, 4=low, 2=critical, 0=empty.) 
-    0, //but1
-    0, //but2
-    0, //but3
-    0, //Ls
-    0, //Ls
-    0, //Ls
-    0, //Rs
-    0, //Rs
-    0, //Rs
-    0x08};
-static uint8_t emptyReport[] = {
-    0x0,
-    0x0};
-
-void send_buttons()
-{
-    xSemaphoreTake(xSemaphore, portMAX_DELAY);
-    report30[1] = timer;
-    //buttons
-    report30[3] = keys_data.button_status_1; // but1_send;
-    report30[4] = keys_data.button_status_2; // but2_send;
-    report30[5] = keys_data.button_status_3; // but3_send;
-    //encode left stick
-    report30[6] = (lx_send << 4) & 0xF0;
-    report30[7] = (lx_send & 0xF0) >> 4;
-    report30[8] = ly_send;
-    //encode right stick
-    report30[9] = (cx_send << 4) & 0xF0;
-    report30[10] = (cx_send & 0xF0) >> 4;
-    report30[11] = cy_send;
-    xSemaphoreGive(xSemaphore);
-    timer += 1;
-    if (timer == 255)
-        timer = 0;
-
-    if (!paired)
-    {
-        emptyReport[1] = timer;
-        esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(emptyReport), emptyReport);
-        vTaskDelay(100);
-    }
-    else
-    {
-        esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(report30), report30);
-        vTaskDelay(15);
-    }
-}
-
-const uint8_t hid_descriptor_gamecube[] = {
-    0x05, 0x01, // Usage Page (Generic Desktop Ctrls)
-    0x09, 0x05, // Usage (Game Pad)
-    0xA1, 0x01, // Collection (Application)
-    //Padding
-    0x95, 0x03, //     REPORT_COUNT = 3
-    0x75, 0x08, //     REPORT_SIZE = 8
-    0x81, 0x03, //     INPUT = Cnst,Var,Abs
-    //Sticks
-    0x09, 0x30,       //   Usage (X)
-    0x09, 0x31,       //   Usage (Y)
-    0x09, 0x32,       //   Usage (Z)
-    0x09, 0x35,       //   Usage (Rz)
-    0x15, 0x00,       //   Logical Minimum (0)
-    0x26, 0xFF, 0x00, //   Logical Maximum (255)
-    0x75, 0x08,       //   Report Size (8)
-    0x95, 0x04,       //   Report Count (4)
-    0x81, 0x02,       //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-    //DPAD
-    0x09, 0x39,       //   Usage (Hat switch)
-    0x15, 0x00,       //   Logical Minimum (0)
-    0x25, 0x07,       //   Logical Maximum (7)
-    0x35, 0x00,       //   Physical Minimum (0)
-    0x46, 0x3B, 0x01, //   Physical Maximum (315)
-    0x65, 0x14,       //   Unit (System: English Rotation, Length: Centimeter)
-    0x75, 0x04,       //   Report Size (4)
-    0x95, 0x01,       //   Report Count (1)
-    0x81, 0x42,       //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,Null State)
-    //Buttons
-    0x65, 0x00, //   Unit (None)
-    0x05, 0x09, //   Usage Page (Button)
-    0x19, 0x01, //   Usage Minimum (0x01)
-    0x29, 0x0E, //   Usage Maximum (0x0E)
-    0x15, 0x00, //   Logical Minimum (0)
-    0x25, 0x01, //   Logical Maximum (1)
-    0x75, 0x01, //   Report Size (1)
-    0x95, 0x0E, //   Report Count (14)
-    0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-    //Padding
-    0x06, 0x00, 0xFF, //   Usage Page (Vendor Defined 0xFF00)
-    0x09, 0x20,       //   Usage (0x20)
-    0x75, 0x06,       //   Report Size (6)
-    0x95, 0x01,       //   Report Count (1)
-    0x15, 0x00,       //   Logical Minimum (0)
-    0x25, 0x7F,       //   Logical Maximum (127)
-    0x81, 0x02,       //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-    //Triggers
-    0x05, 0x01,       //   Usage Page (Generic Desktop Ctrls)
-    0x09, 0x33,       //   Usage (Rx)
-    0x09, 0x34,       //   Usage (Ry)
-    0x15, 0x00,       //   Logical Minimum (0)
-    0x26, 0xFF, 0x00, //   Logical Maximum (255)
-    0x75, 0x08,       //   Report Size (8)
-    0x95, 0x02,       //   Report Count (2)
-    0x81, 0x02,
-    0xc0};
-int hid_descriptor_gc_len = sizeof(hid_descriptor_gamecube);
 ///Switch Replies
-static uint8_t reply02[] = {0x21, 0x01, 0x40, 0x00, 0x00, 0x00, 0xe6, 0x27, 0x78, 0xab, 0xd7, 0x76, 0x00, 0x82, 0x02, 0x03, 0x48, 0x03, 0x02, 0xD8, 0xA0, 0x1D, 0x40, 0x15, 0x66, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-static uint8_t reply08[] = {0x21, 0x02, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x80, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-static uint8_t reply03[] = {0x21, 0x05, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x80, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-static uint8_t reply04[] = {0x21, 0x06, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x83, 0x04, 0x00, 0x6a, 0x01, 0xbb, 0x01, 0x93, 0x01, 0x95, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-static uint8_t reply1060[] = {0x21, 0x03, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x90, 0x10, 0x00, 0x60, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-static uint8_t reply1050[] = {0x21, 0x04, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x90, 0x10, 0x50, 0x60, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-static uint8_t reply1080[] = {0x21, 0x04, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x90, 0x10, 0x80, 0x60, 0x00, 0x00, 0x18, 0x5e, 0x01, 0x00, 0x00, 0xf1, 0x0f,
-                              0x19, 0xd0, 0x4c, 0xae, 0x40, 0xe1,
-                              0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                              0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                              0x00, 0x00};
-static uint8_t reply1098[] = {0x21, 0x04, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x90, 0x10, 0x98, 0x60, 0x00, 0x00, 0x12, 0x19, 0xd0, 0x4c, 0xae, 0x40, 0xe1,
-                              0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                              0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                              0x00, 0x00};
-//User analog stick calib
-static uint8_t reply1010[] = {0x21, 0x04, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x90, 0x10, 0x10, 0x80, 0x00, 0x00, 0x18, 0x00, 0x00};
-static uint8_t reply103D[] = {0x21, 0x05, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x90, 0x10, 0x3D, 0x60, 0x00, 0x00, 0x19, 0xF0, 0x07, 0x7f, 0xF0, 0x07, 0x7f, 0xF0, 0x07, 0x7f, 0xF0, 0x07, 0x7f, 0xF0, 0x07, 0x7f, 0xF0, 0x07, 0x7f, 0xF0, 0x07, 0x7f, 0xF0, 0x07, 0x7f, 0x0f, 0x0f, 0x00, 0x00, 0x00, 0x00};
-static uint8_t reply1020[] = {0x21, 0x04, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x90, 0x10, 0x20, 0x60, 0x00, 0x00, 0x18, 0x00, 0x00};
-static uint8_t reply4001[] = {0x21, 0x04, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x80, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-static uint8_t reply4801[] = {0x21, 0x04, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x80, 0x48, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-static uint8_t reply3001[] = {0x21, 0x04, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x80, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-static uint8_t reply3333[] = {0x21, 0x03, 0x8E, 0x84, 0x00, 0x12, 0x01, 0x18, 0x80, 0x01, 0x18, 0x80, 0x80, 0x80, 0x21, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+// static uint8_t reply02[] = {0x01, 0x40, 0x00, 0x00, 0x00, 0xe6, 0x27, 0x78, 0xab, 0xd7, 0x76, 0x00, 0x82, 0x02, 0x03, 0x48, 0x03, 0x02, 0xD8, 0xA0, 0x1D, 0x40, 0x15, 0x66, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+// Reply for REQUEST_DEVICE_INFO
 
-// sending bluetooth values every 15ms
-void send_task(void *pvParameters)
+/// 给NS_Open() 做状态标记
+static bool conneted = false;
+
+// 前置声明
+void _ns_controller_cb(NS_CONTROLLER_EVT event, NS_CONTROLLER_EVT_ARG_t *arg);
+
+void _wait_connet_task(void *param)
 {
-    const char *TAG = "send_task";
-    ESP_LOGI(TAG, "Sending hid reports on core %d\n", xPortGetCoreID());
-    while (1)
+    if ((!conneted) && (param != NULL))
     {
-        send_buttons();
-    }
-}
+        esp_bd_addr_t addr;
+        memcpy(addr, param, sizeof(esp_bd_addr_t));
+        ESP_ERROR_CHECK(NS_Open(addr));
 
-// callback for notifying when hidd application is registered or not registered
-void application_cb(esp_bd_addr_t bd_addr, esp_hidd_application_state_t state)
-{
-    const char *TAG = "application_cb";
-
-    switch (state)
-    {
-    case ESP_HIDD_APP_STATE_NOT_REGISTERED:
-        ESP_LOGI(TAG, "app not registered");
-        break;
-    case ESP_HIDD_APP_STATE_REGISTERED:
-        ESP_LOGI(TAG, "app is now registered!");
-        if (bd_addr == NULL)
-        {
-            ESP_LOGI(TAG, "bd_addr is null...");
-            break;
-        }
-        break;
-    default:
-        ESP_LOGW(TAG, "unknown app state %i", state);
-        break;
-    }
-}
-// //LED blink
-// void startBlink()
-// {
-//     while (1)
-//     {
-//         gpio_set_level(LED_GPIO, 0);
-//         vTaskDelay(150);
-//         gpio_set_level(LED_GPIO, 1);
-//         vTaskDelay(150);
-//         gpio_set_level(LED_GPIO, 0);
-//         vTaskDelay(150);
-//         gpio_set_level(LED_GPIO, 1);
-//         vTaskDelay(1000);
-//     }
-//     vTaskDelete(NULL);
-// }
-
-// callback for hidd connection changes
-void connection_cb(esp_bd_addr_t bd_addr, esp_hidd_connection_state_t state)
-{
-    const char *TAG = "connection_cb";
-
-    switch (state)
-    {
-    case ESP_HIDD_CONN_STATE_CONNECTED:
-        ESP_LOGI(TAG, "connected to %02x:%02x:%02x:%02x:%02x:%02x",
-                 bd_addr[0], bd_addr[1], bd_addr[2], bd_addr[3], bd_addr[4], bd_addr[5]);
-        ESP_LOGI(TAG, "setting bluetooth non connectable");
-        esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
-
-        // //clear blinking LED - solid
-        // vTaskDelete(BlinkHandle);
-        // BlinkHandle = NULL;
-        // gpio_set_level(LED_GPIO, 1);
-
-        //start solid
-        xSemaphoreTake(xSemaphore, portMAX_DELAY);
-        connected = true;
-        xSemaphoreGive(xSemaphore);
-        //restart send_task
-        if (SendingHandle != NULL)
-        {
-            vTaskDelete(SendingHandle);
-            SendingHandle = NULL;
-        }
-        xTaskCreatePinnedToCore(send_task, "send_task", 2048, NULL, 2, &SendingHandle, 0);
-        break;
-    case ESP_HIDD_CONN_STATE_CONNECTING:
-        ESP_LOGI(TAG, "connecting");
-        break;
-    case ESP_HIDD_CONN_STATE_DISCONNECTED:
-        // //start blink
-        // xTaskCreate(startBlink, "blink_task", 1024, NULL, 1, &BlinkHandle);
-        ESP_LOGI(TAG, "disconnected from %02x:%02x:%02x:%02x:%02x:%02x",
-                 bd_addr[0], bd_addr[1], bd_addr[2], bd_addr[3], bd_addr[4], bd_addr[5]);
-        ESP_LOGI(TAG, "making self discoverable");
-        paired = 0;
-        xSemaphoreTake(xSemaphore, portMAX_DELAY);
-        connected = false;
-        xSemaphoreGive(xSemaphore);
-        esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
-        break;
-    case ESP_HIDD_CONN_STATE_DISCONNECTING:
-        ESP_LOGI(TAG, "disconnecting");
-        break;
-    default:
-        ESP_LOGI(TAG, "unknown connection status");
-        break;
-    }
-}
-
-//callback for discovering
-void get_device_cb()
-{
-    ESP_LOGI("hi", "found a device");
-}
-
-// callback for when hid host requests a report
-void get_report_cb(uint8_t type, uint8_t id, uint16_t buffer_size)
-{
-    const char *TAG = "get_report_cb";
-    ESP_LOGI(TAG, "got a get_report request from host");
-}
-
-// callback for when hid host sends a report
-void set_report_cb(uint8_t type, uint8_t id, uint16_t len, uint8_t *p_data)
-{
-    const char *TAG = "set_report_cb";
-    ESP_LOGI(TAG, "got a report from host");
-}
-
-// callback for when hid host requests a protocol change
-void set_protocol_cb(uint8_t protocol)
-{
-    const char *TAG = "set_protocol_cb";
-    ESP_LOGI(TAG, "got a set_protocol request from host");
-}
-
-// callback for when hid host sends interrupt data
-void intr_data_cb(uint8_t report_id, uint16_t len, uint8_t *p_data)
-{
-    const char *TAG = "intr_data_cb";
-    //switch pairing sequence
-    if (len == 49)
-    {
-        if (p_data[10] == 2)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply02), reply02);
-        }
-        if (p_data[10] == 8)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply08), reply08);
-        }
-        if (p_data[10] == 16 && p_data[11] == 0 && p_data[12] == 96)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply1060), reply1060);
-        }
-        if (p_data[10] == 16 && p_data[11] == 80 && p_data[12] == 96)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply1050), reply1050);
-        }
-        if (p_data[10] == 3)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply03), reply03);
-        }
-        if (p_data[10] == 4)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply04), reply04);
-        }
-        if (p_data[10] == 16 && p_data[11] == 128 && p_data[12] == 96)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply1080), reply1080);
-        }
-        if (p_data[10] == 16 && p_data[11] == 152 && p_data[12] == 96)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply1098), reply1098);
-        }
-        if (p_data[10] == 16 && p_data[11] == 16 && p_data[12] == 128)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply1010), reply1010);
-        }
-        if (p_data[10] == 16 && p_data[11] == 61 && p_data[12] == 96)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply103D), reply103D);
-        }
-        if (p_data[10] == 16 && p_data[11] == 32 && p_data[12] == 96)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply1020), reply1020);
-        }
-        if (p_data[10] == 64 && p_data[11] == 1)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply4001), reply4001);
-        }
-        if (p_data[10] == 72 && p_data[11] == 1)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply4801), reply4801);
-        }
-        if (p_data[10] == 48 && p_data[11] == 1)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply3001), reply3001);
-        }
-
-        if (p_data[10] == 33 && p_data[11] == 33)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply3333), reply3333);
-            paired = 1;
-        }
-        if (p_data[10] == 64 && p_data[11] == 2)
-        {
-            esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xa1, sizeof(reply4001), reply4001);
-        }
-        //ESP_LOGI(TAG, "got an interrupt report from host, subcommand: %d  %d  %d Length: %d", p_data[10], p_data[11], p_data[12], len);
-    }
-    else
-    {
-
-        //ESP_LOGI("heap size:", "%d", xPortGetFreeHeapSize());
-        //ESP_LOGI(TAG, "pairing packet size != 49, subcommand: %d  %d  %d  Length: %d", p_data[10], p_data[11], p_data[12], len);
-    }
-}
-
-// callback for when hid host does a virtual cable unplug
-void vc_unplug_cb(void)
-{
-    const char *TAG = "vc_unplug_cb";
-    ESP_LOGI(TAG, "host did a virtual cable unplug");
-}
-
-esp_err_t set_bt_address()
-{
-    //store a random mac address in flash
-    nvs_handle my_handle;
-    esp_err_t err;
-    uint8_t bt_addr[8];
-
-    err = nvs_open("storage", NVS_READWRITE, &my_handle);
-    if (err != ESP_OK)
-        return err;
-
-    size_t addr_size = 0;
-    err = nvs_get_blob(my_handle, "mac_addr", NULL, &addr_size);
-    if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND)
-        return err;
-
-    if (addr_size > 0)
-    {
-        err = nvs_get_blob(my_handle, "mac_addr", bt_addr, &addr_size);
-    }
-    else
-    {
-        for (int i = 0; i < 8; i++)
-            bt_addr[i] = esp_random() % 255;
-        size_t addr_size = sizeof(bt_addr);
-        err = nvs_set_blob(my_handle, "mac_addr", bt_addr, addr_size);
+        vTaskDelay(5000 / portTICK_RATE_MS);
+        if (!conneted)
+            // 触发事件至关机
+            _ns_controller_cb(NS_CONTROLLER_DISCONNECTED_EVT, NULL);
     }
 
-    err = nvs_commit(my_handle);
-    nvs_close(my_handle);
-    esp_base_mac_addr_set(bt_addr);
-
-    //put mac addr in switch pairing packet
-    for (int z = 0; z < 6; z++)
-        reply02[z + 19] = bt_addr[z];
-
-    return err;
+    vTaskDelete(NULL);
 }
 
-void print_bt_address()
-{
-    const char *TAG = "bt_address";
-    const uint8_t *bd_addr;
-
-    bd_addr = esp_bt_dev_get_address();
-    ESP_LOGI(TAG, "my bluetooth address is %02X:%02X:%02X:%02X:%02X:%02X",
-             bd_addr[0], bd_addr[1], bd_addr[2], bd_addr[3], bd_addr[4], bd_addr[5]);
-}
-
-#define SPP_TAG "ssp_tag"
-static void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
+void _ns_controller_cb(NS_CONTROLLER_EVT event, NS_CONTROLLER_EVT_ARG_t *arg)
 {
     switch (event)
     {
-    case ESP_BT_GAP_DISC_RES_EVT:
-        ESP_LOGI(SPP_TAG, "ESP_BT_GAP_DISC_RES_EVT");
-        esp_log_buffer_hex(SPP_TAG, param->disc_res.bda, ESP_BD_ADDR_LEN);
+    case NS_CONTROLLER_SCANNED_DEVICE_EVT:
+        // TODO: 将地址保存在flash...
+        // TODO: 是否需要新开一个线程?
         break;
-    case ESP_BT_GAP_DISC_STATE_CHANGED_EVT:
-        ESP_LOGI(SPP_TAG, "ESP_BT_GAP_DISC_STATE_CHANGED_EVT");
+    case NS_CONTROLLER_CONNECTED_EVT:
+        conneted = true;
         break;
-    case ESP_BT_GAP_RMT_SRVCS_EVT:
-        ESP_LOGI(SPP_TAG, "ESP_BT_GAP_RMT_SRVCS_EVT");
-        ESP_LOGI(SPP_TAG, "%d", param->rmt_srvcs.num_uuids);
+    case NS_CONTROLLER_DISCONNECTED_EVT:
+        conneted = false;
+        // TODO: 关机...
+        printf("To sleep...\n");
         break;
-    case ESP_BT_GAP_RMT_SRVC_REC_EVT:
-        ESP_LOGI(SPP_TAG, "ESP_BT_GAP_RMT_SRVC_REC_EVT");
-        break;
-    case ESP_BT_GAP_AUTH_CMPL_EVT:
-    {
-        if (param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS)
-        {
-            ESP_LOGI(SPP_TAG, "authentication success: %s", param->auth_cmpl.device_name);
-            esp_log_buffer_hex(SPP_TAG, param->auth_cmpl.bda, ESP_BD_ADDR_LEN);
-        }
-        else
-        {
-            ESP_LOGE(SPP_TAG, "authentication failed, status:%d", param->auth_cmpl.stat);
-        }
-        break;
-    }
-    case ESP_BT_GAP_CONFIG_EIR_DATA_EVT:
-        ESP_LOGI(SPP_TAG, "? ESP_BT_GAP_CONFIG_EIR_DATA_EVT ?");
-        break;
-
-    case ESP_BT_GAP_MODE_CHG_EVT:
-        ESP_LOGI(SPP_TAG, "? ESP_BT_GAP_MODE_CHG_EVT ?");
-        break;
-
+    
     default:
-        ESP_LOGE(SPP_TAG, "Unknow event:%d", event);
         break;
     }
 }
+
+
 void app_main()
 {
+    esp_err_t ret;
+
+    ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
     memset(&keys_data, 0, sizeof(keys_data));
 
     //GameCube Contoller reading init
     // rmt_tx_init();
     // rmt_rx_init();
     // xTaskCreatePinnedToCore(get_buttons, "gbuttons", 2048, NULL, 1, NULL, 1);
-    //flash LED
-    // vTaskDelay(100);
-    // gpio_set_level(LED_GPIO, 0);
-    // vTaskDelay(100);
-    // gpio_set_level(LED_GPIO, 1);
-    // vTaskDelay(100);
-    // gpio_set_level(LED_GPIO, 0);
-    // vTaskDelay(100);
-    // gpio_set_level(LED_GPIO, 1);
-    // vTaskDelay(100);
-    // gpio_set_level(LED_GPIO, 0);
-    const char *TAG = "app_main";
-    esp_err_t ret;
-    static esp_hidd_callbacks_t callbacks;
-    static esp_hidd_app_param_t app_param;
-    static esp_hidd_qos_param_t both_qos;
 
-    xSemaphore = xSemaphoreCreateMutex();
+
+    // TODO: 读取脚本设置中的手柄类型
+    _joy_type = Left_Joycon; // Switch_pro));
+    ESP_ERROR_CHECK(NS_Controller_init(_joy_type, _ns_controller_cb)); 
+    NS_Set_Battery(Battery_Level_3);
+    NS_Set_Charging(true);
+
+    // TODO: 从flash 读取匹配过的地址
+    esp_bd_addr_t bd_addr = {0x58, 0x2F, 0x40, 0xDA, 0xAF, 0x01};
+ 
+    if (bd_addr == NULL)
+        ESP_ERROR_CHECK(NS_Scan());
+    else
+    {
+        xTaskCreatePinnedToCore(_wait_connet_task, "wait_connet_task", 1024, bd_addr, 10, NULL, 1);
+
+    }
+
 
     Button_Config_t btn_config = Button_Default_Config(GPIO_NUM_0, _button_0_Callback);
     _button_0_handle = Button_Enable(&btn_config);
@@ -1111,80 +798,10 @@ void app_main()
     // //configure GPIO with the given settings
     // gpio_config(&io_conf);
 
-    app_param.name = "Wireless Gamepad";
-    app_param.description = "Gamepad";
-    app_param.provider = "Nintendo";
-    app_param.subclass = 0x8;
-    app_param.desc_list = hid_descriptor_gamecube;
-    app_param.desc_list_len = hid_descriptor_gc_len;
-    memset(&both_qos, 0, sizeof(esp_hidd_qos_param_t));
 
-    callbacks.application_state_cb = application_cb;
-    callbacks.connection_state_cb = connection_cb;
-    callbacks.get_report_cb = get_report_cb;
-    callbacks.set_report_cb = set_report_cb;
-    callbacks.set_protocol_cb = set_protocol_cb;
-    callbacks.intr_data_cb = intr_data_cb;
-    callbacks.vc_unplug_cb = vc_unplug_cb;
-
-    ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
-    set_bt_address();
-
-    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BLE));
-
-    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    esp_bt_mem_release(ESP_BT_MODE_BLE);
-    if ((ret = esp_bt_controller_init(&bt_cfg)) != ESP_OK)
-    {
-        ESP_LOGE(TAG, "initialize controller failed: %s\n", esp_err_to_name(ret));
-        return;
-    }
-
-    if ((ret = esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT)) != ESP_OK)
-    {
-        ESP_LOGE(TAG, "enable controller failed: %s\n", esp_err_to_name(ret));
-        return;
-    }
-
-    if ((ret = esp_bluedroid_init()) != ESP_OK)
-    {
-        ESP_LOGE(TAG, "initialize bluedroid failed: %s\n", esp_err_to_name(ret));
-        return;
-    }
-
-    if ((ret = esp_bluedroid_enable()) != ESP_OK)
-    {
-        ESP_LOGE(TAG, "enable bluedroid failed: %s\n", esp_err_to_name(ret));
-        return;
-    }
-    esp_bt_gap_register_callback(esp_bt_gap_cb);
-    ESP_LOGI(TAG, "setting hid parameters");
-    esp_hid_device_register_app(&app_param, &both_qos, &both_qos);
-
-    ESP_LOGI(TAG, "starting hid device");
-    esp_hid_device_init(&callbacks);
-
-    ESP_LOGI(TAG, "setting device name");
-    esp_bt_dev_set_device_name("Pro Controller");
-
-    static esp_bt_cod_t class;
-    class.minor = 2;
-    class.major = 5;
-    class.service = 1;
-    esp_bt_gap_set_cod(class, ESP_BT_SET_COD_ALL);
-    ESP_LOGI(TAG, "setting hid device class");
-
-    ESP_LOGI(TAG, "setting to connectable, discoverable");
-    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE);
     // //start blinking
     // xTaskCreate(startBlink, "blink_task", 1024, NULL, 1, &BlinkHandle);
+
 
     xTaskCreatePinnedToCore(uart_rx_task, "uart_rx_task", 2048, NULL, 10, NULL, 1);
 }
