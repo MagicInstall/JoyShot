@@ -1,7 +1,8 @@
 /**
- *    WS28212 RMT 方式驱动
+ *  WS28212 RMT 方式驱动
  * 
- *    2021-09-02  wing    创建.
+ *  2021-09-02  wing    创建.
+ *  2021-09-04  wing    加入双缓冲.
  */
 
 #include <string.h>
@@ -104,11 +105,10 @@ esp_err_t WS2812_Init(WS2812_TIMNG_CONFUG_t *config)
     // 初始化缓冲区
     if (_send_buf_A.semaphore) {vSemaphoreDelete(_send_buf_A.semaphore); _send_buf_A.semaphore = NULL; } 
     if (_send_buf_B.semaphore) {vSemaphoreDelete(_send_buf_B.semaphore); _send_buf_B.semaphore = NULL; } 
-    if (config->Double_Buffer)
-    {
-        _send_buf_A.semaphore = xSemaphoreCreateMutex();
+    _send_buf_A.semaphore = xSemaphoreCreateMutex();
+    if (_rmt_config.Double_Buffer)
         _send_buf_B.semaphore = xSemaphoreCreateMutex();
-    } 
+    
     _send_buf_A.starus = Send_Buffer_IDLE;
     _send_buf_B.starus = Send_Buffer_IDLE;
 
@@ -120,7 +120,7 @@ esp_err_t WS2812_Init(WS2812_TIMNG_CONFUG_t *config)
 
     _send_buf_A.items = (rmt_item32_t *)malloc(buf_len);
     if (_send_buf_A.items == NULL) return ESP_ERR_NO_MEM;
-    if (config->Double_Buffer) 
+    if (_rmt_config.Double_Buffer) 
     {
         _send_buf_B.items = (rmt_item32_t *)malloc(buf_len);
         if (_send_buf_B.items == NULL) return ESP_ERR_NO_MEM;
@@ -159,6 +159,20 @@ esp_err_t WS2812_Init(WS2812_TIMNG_CONFUG_t *config)
     return rmt_driver_install(_rmt_config.RMT_Channel, 0, 0);
 }
 
+/**
+ *  指向当前可填充数据的缓冲区的指针
+ * 
+ *  该指针的status 成员只有WS2812_Fill_Buffer() 可以设置为Send_Buffer_Filled;
+ * 
+ *  只有WS2812_Refresh() 可以切换该指针(不启用双缓冲则不会切换), 
+ *  无论填充多少次, 只要一日未刷新(发送), 
+ *  WS2812_Fill_Buffer() 都只是更新同一个缓冲区;
+ */
+static Send_Buffer_t *_fill_buf = &_send_buf_A;
+
+/**
+ *  填充缓冲区
+ */
 esp_err_t WS2812_Fill_Buffer(WS2812_COLOR_t *colors, uint32_t count)
 {
     if (count > _rmt_config.LEDs_Count_Max)
@@ -167,9 +181,8 @@ esp_err_t WS2812_Fill_Buffer(WS2812_COLOR_t *colors, uint32_t count)
         ESP_LOGI(TAG, "WS2812_Fill_Buffer() - Exceeded the count max , set to preset");
     }
 
-    // 选择缓冲区
-    static Send_Buffer_t *current_buf = &_send_buf_A;
-    // if (current_buf->status)
+    xSemaphoreTake(_fill_buf->semaphore, portMAX_DELAY);
+    // if (_fill_buf->status)
 
 
     uint32_t item_idx = 0;
@@ -184,8 +197,8 @@ esp_err_t WS2812_Fill_Buffer(WS2812_COLOR_t *colors, uint32_t count)
         for (uint32_t bit = 0; bit < BITS_PER_LED; bit++)
         {
             bit_is_set = grb & mask;
-            // current_buf[idx * BITS_PER_LED + bit] = bit_is_set ? 
-            current_buf->items[item_idx ++] = bit_is_set ? 
+            // _fill_buf[idx * BITS_PER_LED + bit] = bit_is_set ? 
+            _fill_buf->items[item_idx ++] = bit_is_set ? 
                     (rmt_item32_t){{{_rmt_config.T1H, 1, _rmt_config.T1L, 0}}} : 
                     (rmt_item32_t){{{_rmt_config.T0H, 1, _rmt_config.T0L, 0}}};
             mask >>= 1;
@@ -193,55 +206,53 @@ esp_err_t WS2812_Fill_Buffer(WS2812_COLOR_t *colors, uint32_t count)
     }
 
     // 加入RES
-    // current_buf[item_idx] = (rmt_item32_t){{{0, 0, _rmt_config.RES, 0}}};
-    current_buf->items[item_idx ++] = (rmt_item32_t){{{_rmt_config.RES, 0, _rmt_config.RES, 0}}}; // 两个都是低电平
+    _fill_buf->items[item_idx ++] = (rmt_item32_t){{{_rmt_config.RES, 0, _rmt_config.RES, 0}}}; // 两个都是低电平
 
-    // 将item 总数写入第一个item作为
-    current_buf->count = item_idx;
-    // current_buf->s
+    _fill_buf->count = item_idx;
+    _fill_buf->starus = Send_Buffer_Filled;
+
+    xSemaphoreGive(_fill_buf->semaphore);
     return ESP_OK;
 }
 
-esp_err_t WS2812_Refresh(/*WS2812_COLOR_t *colors, uint32_t count, */bool wait, uint32_t *stopwatch)
-{
-    // uint32_t cnt;
-    
-    // // TODO: 计时开始
-    // if (wait && (stopwatch != NULL))
-    // {
-
-    // }
-
-    // cnt = WS2812_Fill_Buffer(colors, count);
-    
-    // // TODO: 计时结束
-    // if (wait && (stopwatch != NULL))
-    // {
-
-    // }
-
-    // 先WS2812_Fill_Buffer() 再等待上一次发送完成,
-    // 若wait 为false , 就可以利用两次发送的时间差, 完成WS2812_Fill_Buffer().
+/**
+ *  通过RMT 发送数据到WS2812
+ */
+esp_err_t WS2812_Refresh(bool wait, TickType_t xTicksToWait)
+{   
     ESP_ERROR_CHECK(rmt_wait_tx_done(_rmt_config.RMT_Channel, portMAX_DELAY));
-    // TODO: 计时开始
-    if (wait && (stopwatch != NULL))
-    {
-
-    }
 
     // 选择缓冲区
-    static Send_Buffer_t *current_buf = &_send_buf_A;
+    Send_Buffer_t *current_buf = _fill_buf;
 
-    esp_err_t rst = rmt_write_items(_rmt_config.RMT_Channel, current_buf->items, current_buf->count/*cnt * BITS_PER_LED + 1加上RES信号的item*/, wait);
-    if (rst != ESP_OK) return rst;
-
-    // TODO: 计时结束
-    if (wait && (stopwatch != NULL))
+    esp_err_t rst = xSemaphoreTake(current_buf->semaphore, xTicksToWait);
+    if (rst != pdTRUE) 
     {
-
+        ESP_LOGI("WS2812_Refresh", "Semaphore timeout.");
+        return rst;    // 超时则立刻返回
     }
 
-    return ESP_OK;
+    // 若缓冲区未填充
+    if (current_buf->starus != Send_Buffer_Filled)
+    {
+        // 还锁并返回
+        xSemaphoreGive(current_buf->semaphore);
+        return ESP_OK;
+    }
+
+    // 拿到锁之后先切换缓冲区, 让WS2812_Fill_Buffer() 填充下一个缓冲区.
+    if (_rmt_config.Double_Buffer)
+        _fill_buf = (current_buf == &_send_buf_A) ? 
+                        &_send_buf_B : 
+                        &_send_buf_A;
+
+
+    rst = rmt_write_items(_rmt_config.RMT_Channel, current_buf->items, current_buf->count/*cnt * BITS_PER_LED + 1加上RES信号的item*/, wait);
+
+    current_buf->starus = Send_Buffer_IDLE;
+
+    xSemaphoreGive(current_buf->semaphore);
+    return rst;
 }
 
 esp_err_t WS2812_Send_LEDs(WS2812_COLOR_t *colors, uint32_t count)
@@ -249,18 +260,37 @@ esp_err_t WS2812_Send_LEDs(WS2812_COLOR_t *colors, uint32_t count)
     esp_err_t rst = WS2812_Fill_Buffer(colors, count);
     if (rst != ESP_OK) return rst;
 
-    return WS2812_Refresh(false, NULL);
+    return WS2812_Refresh(false, portMAX_DELAY);
 } 
 
-
-esp_err_t WS2812_Loop_Start(void)
+static void _refresh_task(void *pvParameters)
 {
-    
+    ESP_ERROR_CHECK(WS2812_Refresh(false, (TickType_t)pvParameters));
 }
 
-// void WS_Test(void)
-// {
-//     uint32_t clk;
-//     ESP_ERROR_CHECK(rmt_get_counter_clock(RMT_CHANNEL_0, &clk));
-//     ESP_LOGI(TAG, "rmt_get_counter_clock %d", clk);
-// }
+static esp_timer_handle_t _timer_handle = NULL;
+
+esp_err_t WS2812_Loop_Start(uint16_t Hz)
+{
+    ESP_ERROR_CHECK(Hz < 1);
+    ESP_ERROR_CHECK(_send_buf_A.starus == Send_Buffer_Uninitialized);
+
+    uint64_t us = 1000000 / Hz;
+    if (_timer_handle == NULL)
+    {
+        esp_timer_create_args_t timer_arg = {
+            .callback = _refresh_task,
+            /* 留给WS2812_Refresh 只有一帧的等待时间, 该时间只是大概. */
+            .arg = (void *)(us / 1000 / portTICK_RATE_MS), 
+            .name = "WS2812_Timer" 
+        };        
+        ESP_ERROR_CHECK(esp_timer_create(&timer_arg, &_timer_handle));
+    }
+
+    return esp_timer_start_periodic(_timer_handle, us);
+}
+esp_err_t WS2812_Loop_Stop(void)
+{
+    return esp_timer_stop(_timer_handle);
+}
+

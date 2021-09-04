@@ -488,13 +488,60 @@ void _ns_controller_cb(NS_CONTROLLER_EVT event, NS_CONTROLLER_EVT_ARG_t *arg)
 }
 
 static WS2812_COLOR_t color[] = {
-    {0x800000}, 
-    {0x008000}, 
-    {0x000080}, 
     {0xFF0000}, 
     {0x00FF00}, 
-    {0x0000FF}
+    {0x0000FF}, 
 };
+
+// 测试
+uint8_t w[] = {
+            0, 2, 4, 6, 
+            9, 12, 15, 18,
+            22, 26, 30, 34,
+            39, 44, 49, 54,
+            60, 66, 72, 78,
+            85, 92, 99, 106,
+            114, 122
+};
+
+void _ws2812_task(void *param)
+{
+
+    // TODO: 打板后要重新测试几个时序时间
+    WS2812_TIMNG_CONFUG_t leds_config = {
+        .Output_IO_Num  = GPIO_NUM_17, 
+        .RMT_Channel    = RMT_CHANNEL_7, // 使用最后一个, 将前面的7个mem_block 留给其它应用 
+        .Double_Buffer  = false,
+        .LEDs_Count_Max = 5,
+        .T0H            = 300,
+        .T0L            = 800,
+        .T1H            = 800,
+        .T1L            = 800,
+        // .T0H            = 350,
+        // .T0L            = 1300,
+        // .T1H            = 1300,
+        // .T1L            = 1300,
+        .RES            = 200000,
+    };
+    ESP_ERROR_CHECK(WS2812_Init(&leds_config));
+    vTaskDelay(leds_config.RES/ 1000 / portTICK_RATE_MS);
+    ESP_ERROR_CHECK(WS2812_Loop_Start(25));
+
+    // 测试
+    int i = 0;
+    int a = 1;
+    while (1)
+    {
+        color[0].r = w[i];
+        color[0].g = w[i];
+        color[0].b = w[i];
+        i += a;
+        if (i == sizeof(w) - 1) a = -1;
+        if (i == 0)    a = 1;
+        ESP_ERROR_CHECK(WS2812_Fill_Buffer(color, 1));
+        vTaskDelay(40 / portTICK_RATE_MS);
+    }
+}
 
 void app_main()
 {
@@ -510,33 +557,9 @@ void app_main()
 
     memset(&keys_data, 0, sizeof(keys_data));
 
-    // TODO: 打板后要重新测试几个时序时间
-    WS2812_TIMNG_CONFUG_t leds_config = {
-        .Output_IO_Num  = GPIO_NUM_17, 
-        .RMT_Channel    = RMT_CHANNEL_7, // 使用最后一个, 将前面的7个mem_block 留给其它应用 
-        .Double_Buffer  = true,
-        .LEDs_Count_Max = 5,
-        .T0H            = 300,
-        .T0L            = 800,
-        .T1H            = 800,
-        .T1L            = 800,
-        // .T0H            = 350,
-        // .T0L            = 1300,
-        // .T1H            = 1300,
-        // .T1L            = 1300,
-        .RES            = 200000,
-    };
-    ESP_ERROR_CHECK(WS2812_Init(&leds_config));
-    vTaskDelay(1000 / portTICK_RATE_MS);
-
-    ESP_ERROR_CHECK(WS2812_Fill_Buffer(color, 5));
-    // 测试
-    while (1)
-    {
-        ESP_ERROR_CHECK(WS2812_Refresh(false, NULL));
-        // vTaskDelay(10 / portTICK_RATE_MS);
-    }
     
+    // WS2812
+    xTaskCreatePinnedToCore(_ws2812_task, "ws2812_task", 2048, NULL, 9, NULL, 1);
 
 
     //GameCube Contoller reading init
