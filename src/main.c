@@ -25,12 +25,13 @@
 // #include "freertos/semphr.h"
 
 #include "driver/gpio.h"
-// #include "driver/rmt.h"
+#include "driver/rmt.h"
 // #include "soc/rmt_reg.h"
 #include "driver/periph_ctrl.h"
 
 #include "ns_controller.h"
 #include "buttons.h"
+#include "rmt_ws2812.h"
 #include "uart_command.h"
 
 static const char *TAG = "Main";
@@ -129,12 +130,12 @@ static const char *TAG = "Main";
 //     items[24].level1 = 1;
 // }
 
-// //RMT Receiver Init
+//RMT Receiver Init
 // rmt_config_t rmt_rx;
 // static void rmt_rx_init()
 // {
 //     rmt_rx.channel = RMT_RX_CHANNEL;
-//     rmt_rx.gpio_num = RMT_RX_GPIO_NUM;
+//    rmt_rx.gpio_num = RMT_RX_GPIO_NUM;
 //     rmt_rx.clk_div = RMT_CLK_DIV;
 //     rmt_rx.mem_block_num = 4;
 //     rmt_rx.rmt_mode = RMT_MODE_RX;
@@ -486,6 +487,14 @@ void _ns_controller_cb(NS_CONTROLLER_EVT event, NS_CONTROLLER_EVT_ARG_t *arg)
     }
 }
 
+static WS2812_COLOR_t color[] = {
+    {0x800000}, 
+    {0x008000}, 
+    {0x000080}, 
+    {0xFF0000}, 
+    {0x00FF00}, 
+    {0x0000FF}
+};
 
 void app_main()
 {
@@ -500,6 +509,35 @@ void app_main()
     ESP_ERROR_CHECK(ret);
 
     memset(&keys_data, 0, sizeof(keys_data));
+
+    // TODO: 打板后要重新测试几个时序时间
+    WS2812_TIMNG_CONFUG_t leds_config = {
+        .Output_IO_Num  = GPIO_NUM_17, 
+        .RMT_Channel    = RMT_CHANNEL_7, // 使用最后一个, 将前面的7个mem_block 留给其它应用 
+        .Double_Buffer  = true,
+        .LEDs_Count_Max = 5,
+        .T0H            = 300,
+        .T0L            = 800,
+        .T1H            = 800,
+        .T1L            = 800,
+        // .T0H            = 350,
+        // .T0L            = 1300,
+        // .T1H            = 1300,
+        // .T1L            = 1300,
+        .RES            = 200000,
+    };
+    ESP_ERROR_CHECK(WS2812_Init(&leds_config));
+    vTaskDelay(1000 / portTICK_RATE_MS);
+
+    ESP_ERROR_CHECK(WS2812_Fill_Buffer(color, 5));
+    // 测试
+    while (1)
+    {
+        ESP_ERROR_CHECK(WS2812_Refresh(false, NULL));
+        // vTaskDelay(10 / portTICK_RATE_MS);
+    }
+    
+
 
     //GameCube Contoller reading init
     // rmt_tx_init();
@@ -520,7 +558,7 @@ void app_main()
         ESP_ERROR_CHECK(NS_Scan());
     else
     {
-        xTaskCreatePinnedToCore(_wait_connet_task, "wait_connet_task", 1024, bd_addr, 10, NULL, 1);
+        xTaskCreatePinnedToCore(_wait_connet_task, "wait_connet_task", 2048, bd_addr, 10, NULL, 1);
 
     }
 
