@@ -383,10 +383,10 @@ static uint8_t emptyReport[] = {0x00, 0x00};
 // }
 
 // sending bluetooth values every 15ms
-void send_task(void *pvParameters)
+static void _send_task(void *pvParameters)
 {
     ESP_LOGI("send_task", "Sending hid reports on core %d\n", xPortGetCoreID());
-    const uint8_t SEND_ID = 0x30;
+    const uint8_t SEND_ID = 0xA1;//0x30;
 
     while (1)
     {
@@ -435,7 +435,7 @@ void send_task(void *pvParameters)
 // }
 
 // callback for hidd connection changes
-void connection_cb(esp_bd_addr_t bd_addr, esp_hidd_connection_state_t state)
+static void _connection_cb(esp_bd_addr_t bd_addr, esp_hidd_connection_state_t state)
 {
     const char *CONN_TAG = "connection_cb";
 
@@ -462,7 +462,7 @@ void connection_cb(esp_bd_addr_t bd_addr, esp_hidd_connection_state_t state)
             vTaskDelete(SendingHandle);
             SendingHandle = NULL;
         }
-        xTaskCreatePinnedToCore(send_task, "send_task", 2048, NULL, 2, &SendingHandle, 0);
+        xTaskCreatePinnedToCore(_send_task, "send_task", 2048, NULL, 2, &SendingHandle, 0);
         _callback(NS_CONTROLLER_CONNECTED_EVT, NULL);
         break;
     case ESP_HIDD_CONN_STATE_CONNECTING:
@@ -496,26 +496,26 @@ void connection_cb(esp_bd_addr_t bd_addr, esp_hidd_connection_state_t state)
 }
 
 //callback for discovering
-void get_device_cb()
-{
-    ESP_LOGI("hi", "found a device");
-}
+// static void _get_device_cb()
+// {
+//     ESP_LOGI("hi", "found a device");
+// }
 
 // callback for when hid host requests a report
-void get_report_cb(uint8_t type, uint8_t id, uint16_t buffer_size)
+static void _get_report_cb(uint8_t type, uint8_t id, uint16_t buffer_size)
 {
     // const char *TAG = "get_report_cb";
     ESP_LOGI("get_report_cb", "got a get_report request from host");
 }
 
 // callback for when hid host sends a report
-void set_report_cb(uint8_t type, uint8_t id, uint16_t len, uint8_t *p_data)
+static void _set_report_cb(uint8_t type, uint8_t id, uint16_t len, uint8_t *p_data)
 {
     ESP_LOGI("set_report_cb", "got a report from host");
 }
 
 // callback for when hid host requests a protocol change
-void set_protocol_cb(uint8_t protocol)
+static void _set_protocol_cb(uint8_t protocol)
 {
     ESP_LOGI("set_protocol_cb", "got a set_protocol request from host");
 }
@@ -568,7 +568,7 @@ void _update_rumble(void)
 }
 
 // callback for when hid host sends interrupt data
-void intr_data_cb(uint8_t report_id, uint16_t len, uint8_t *p_data)
+static void _intr_data_cb(uint8_t report_id, uint16_t len, uint8_t *p_data)
 {
     const char *INTR_TAG = "intr_data_cb";
     // const uint8_t REPLT_ID = 0x21;
@@ -805,12 +805,12 @@ void intr_data_cb(uint8_t report_id, uint16_t len, uint8_t *p_data)
 }
 
 // callback for when hid host does a virtual cable unplug
-void vc_unplug_cb(void)
+static void _vc_unplug_cb(void)
 {
     ESP_LOGI("vc_unplug_cb", "host did a virtual cable unplug");
 }
 
-esp_err_t set_bt_address()
+static esp_err_t set_bt_address()
 {
     //store a random mac address in flash
     nvs_handle my_handle;
@@ -858,7 +858,7 @@ esp_err_t set_bt_address()
     return err;
 }
 
-void print_bt_address()
+static void print_bt_address()
 {
     const uint8_t *bd_addr;
 
@@ -868,7 +868,7 @@ void print_bt_address()
 }
 
 #define GAP_TAG "gap_cb"
-static void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
+static void _esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
 {
     switch (event)
     {
@@ -938,7 +938,7 @@ static void esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *pa
 }
 
 // callback for notifying when hidd application is registered or not registered
-void application_cb(esp_bd_addr_t bd_addr, esp_hidd_application_state_t state)
+static void _application_cb(esp_bd_addr_t bd_addr, esp_hidd_application_state_t state)
 {
     const char *APP_TAG = "application_cb";
 
@@ -1000,7 +1000,7 @@ esp_err_t NS_Controller_init(NS_Controller_Type_t joy_type, NS_CONTROLLER_CALLBA
         return ESP_FAIL;
     }
     
-    if (esp_bt_gap_register_callback(esp_bt_gap_cb) != ESP_OK)
+    if (esp_bt_gap_register_callback(_esp_bt_gap_cb) != ESP_OK)
         return ESP_FAIL;
 
     ESP_LOGI(TAG, "setting hid parameters");
@@ -1017,13 +1017,13 @@ esp_err_t NS_Controller_init(NS_Controller_Type_t joy_type, NS_CONTROLLER_CALLBA
         return ESP_FAIL;
 
     ESP_LOGI(TAG, "starting hid device");
-    callbacks.application_state_cb = application_cb;
-    callbacks.connection_state_cb = connection_cb;
-    callbacks.get_report_cb = get_report_cb;
-    callbacks.set_report_cb = set_report_cb;
-    callbacks.set_protocol_cb = set_protocol_cb;
-    callbacks.intr_data_cb = intr_data_cb;
-    callbacks.vc_unplug_cb = vc_unplug_cb;
+    callbacks.application_state_cb = _application_cb;
+    callbacks.connection_state_cb = _connection_cb;
+    callbacks.get_report_cb = _get_report_cb;
+    callbacks.set_report_cb = _set_report_cb;
+    callbacks.set_protocol_cb = _set_protocol_cb;
+    callbacks.intr_data_cb = _intr_data_cb;
+    callbacks.vc_unplug_cb = _vc_unplug_cb;
     if (esp_hid_device_init(&callbacks) != ESP_OK)
         return ESP_FAIL;
 
