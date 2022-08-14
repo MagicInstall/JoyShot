@@ -31,7 +31,8 @@
 
 #include "ns_controller.h"
 #include "buttons.h"
-#include "rmt_ws2812.h"
+#include "lamp.h"
+// #include "rmt_ws2812.h"
 #include "uart_command.h"
 
 static const char *TAG = "Main";
@@ -506,25 +507,6 @@ uint8_t w[] = {
 
 void _ws2812_task(void *param)
 {
-
-    // TODO: 打板后要重新测试几个时序时间
-    WS2812_TIMNG_CONFUG_t leds_config = {
-        .Output_IO_Num  = GPIO_NUM_17, 
-        .RMT_Channel    = RMT_CHANNEL_7, // 使用最后一个, 将前面的7个mem_block 留给其它应用 
-        .Double_Buffer  = false,
-        .LEDs_Count_Max = 5,
-        .T0H            = 300,
-        .T0L            = 800,
-        .T1H            = 800,
-        .T1L            = 800,
-        // .T0H            = 350,
-        // .T0L            = 1300,
-        // .T1H            = 1300,
-        // .T1L            = 1300,
-        .RES            = 200000,
-    };
-    ESP_ERROR_CHECK(WS2812_Init(&leds_config));
-    vTaskDelay(leds_config.RES/ 1000 / portTICK_RATE_MS);
     ESP_ERROR_CHECK(WS2812_Loop_Start(25));
 
     // 测试
@@ -535,16 +517,22 @@ void _ws2812_task(void *param)
         color[0].r = w[i];
         color[0].g = w[i];
         color[0].b = w[i];
+        color[1].r = w[i];
+        color[1].g = w[i];
+        color[1].b = w[i];
         i += a;
         if (i == sizeof(w) - 1) a = -1;
         if (i == 0)    a = 1;
-        ESP_ERROR_CHECK(WS2812_Fill_Buffer(color, 1));
+        ESP_ERROR_CHECK(WS2812_Fill_Buffer(color, 2));
         vTaskDelay(40 / portTICK_RATE_MS);
     }
 }
 
 void app_main()
 {
+    // 等待外设上电
+    vTaskDelay(50 / portTICK_RATE_MS);
+
     esp_err_t ret;
 
     ret = nvs_flash_init();
@@ -555,11 +543,19 @@ void app_main()
     }
     ESP_ERROR_CHECK(ret);
 
-    memset(&keys_data, 0, sizeof(keys_data));
+    // TODO: 判断重置键是否长按
 
-    
-    // WS2812
-    xTaskCreatePinnedToCore(_ws2812_task, "ws2812_task", 2048, NULL, 9, NULL, 1);
+    // Lamp
+    ESP_ERROR_CHECK(Lamp_Init(NULL));
+    WS2812_COLOR_t color = {
+        .r = 0,
+        .g = 0,
+        .b = 0xFF
+    };
+    ESP_ERROR_CHECK(Lamp_Set_Color(&color));
+
+    // WS2812 测试
+    // xTaskCreatePinnedToCore(_ws2812_task, "ws2812_task", 2048, NULL, 9, NULL, 1);
 
 
     //GameCube Contoller reading init
@@ -568,11 +564,16 @@ void app_main()
     // xTaskCreatePinnedToCore(get_buttons, "gbuttons", 2048, NULL, 1, NULL, 1);
 
 
+    memset(&keys_data, 0, sizeof(keys_data));
     // TODO: 读取脚本设置中的手柄类型
     _joy_type = Left_Joycon; // Switch_pro));
+
+    // 启动蓝牙
     ESP_ERROR_CHECK(NS_Controller_init(_joy_type, _ns_controller_cb)); 
-    NS_Set_Battery(Battery_Level_3);
-    NS_Set_Charging(true);
+    NS_Set_Battery(Battery_Full);
+    // NS_Set_Battery(Battery_Level_3);
+    // NS_Set_Charging(true);
+
 
     // TODO: 从flash 读取匹配过的地址
     esp_bd_addr_t bd_addr = {0x58, 0x2F, 0x40, 0xDA, 0xAF, 0x01};

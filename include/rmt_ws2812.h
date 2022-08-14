@@ -13,7 +13,7 @@
  *  使用自动刷新时, 直接调用WS2812_Send_LEDs() 可不用等待下一个刷新时机
  *  立即发送新的数据.
  *  
- *  ** 本驱动大致测试过, 基本上是线程完全的(除了初始化方法);
+ *  本驱动大致测试过, 基本上是线程完全的(除了初始化方法);
  * 
  *  2021-09-02    wing    创建.
  */
@@ -26,6 +26,17 @@
 #include "driver/gpio.h"
 #include "esp_err.h"
 
+#ifndef WS2812_DIN_GPIO_NUM
+#error "WS2812_DIN_GPIO_NUM undefine!"
+#endif
+#ifndef WS2812_COUNT
+#error "WS2812_COUNT undefine!"
+#endif
+
+#ifndef WS2812_RMT_CHANNEL
+// 默认使用最后一个, 将前面的7个mem_block 留给其它应用
+#define WS2812_RMT_CHANNEL RMT_CHANNEL_7
+#endif
 #ifndef WS2812_RMT_CLK_DIV
 /// 对于WS2812, 固定使用2分频就OK
 #define WS2812_RMT_CLK_DIV 2 
@@ -56,7 +67,7 @@ typedef struct
     /// 最大值是819174 x WS2812_RMT_CLK_DIV, 
     /// 超过此值时高几bit 可能被截断.
     uint32_t        RES;
-} WS2812_TIMNG_CONFUG_t;
+} WS2812_CONFIG_t;
 
 /**
  *  方便分量设置RGB值的结构体
@@ -73,9 +84,15 @@ typedef union
 } WS2812_COLOR_t;
 
 /**
+ * 取ws2812 的默认配置
+ * @return 返回配置结构体的指针。
+ */
+const WS2812_CONFIG_t * WS2812_DEFAULT_CONFIG(void);
+
+/**
  * 初始化WS2812 
  */
-esp_err_t WS2812_Init(WS2812_TIMNG_CONFUG_t *config);
+esp_err_t WS2812_Init(WS2812_CONFIG_t *config);
 
 /**
  *  填充数据但不会触发刷新

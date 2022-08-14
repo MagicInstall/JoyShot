@@ -47,7 +47,7 @@ static uint32_t _rmt_1_tick_ns = 25;
  *  这里的T0H, T0L, T1H, T1L, RES 的值与WS2812_Init() 时的不同,
  *  WS2812_Init()使用纳秒, 这里是保存换算后的tick 数.
  */
-static WS2812_TIMNG_CONFUG_t _rmt_config;
+static WS2812_CONFIG_t _rmt_config;
 
 
 // // These values are determined by measuring pulse timing with logic analyzer and adjusting to match datasheet.
@@ -80,6 +80,21 @@ static Send_Buffer_t _send_buf_A = {Send_Buffer_Uninitialized, NULL, 0, NULL};
 static Send_Buffer_t _send_buf_B = {Send_Buffer_Uninitialized, NULL, 0, NULL};
 
 
+static const WS2812_CONFIG_t _WS2812_DEFAULT_CONFIG = {
+    .Output_IO_Num  = WS2812_DIN_GPIO_NUM, 
+    .RMT_Channel    = WS2812_RMT_CHANNEL,  
+    .Double_Buffer  = false,
+    .LEDs_Count_Max = WS2812_COUNT,
+    .T0H            = 300, //350,
+    .T0L            = 800, //1300,
+    .T1H            = 800, //1300,
+    .T1L            = 800, //1300,
+    .RES            = 200000,
+};
+const WS2812_CONFIG_t * WS2812_DEFAULT_CONFIG(void) {
+    return &_WS2812_DEFAULT_CONFIG;
+}
+
 
 // WS2812_COLOR_t set_LedRGB(uint8_t r, uint8_t g, uint8_t b)
 // {
@@ -93,14 +108,14 @@ static Send_Buffer_t _send_buf_B = {Send_Buffer_Uninitialized, NULL, 0, NULL};
 
 #define _CONVERT_TO_TICKS(ns)   (ns / _rmt_1_tick_ns)
 
-esp_err_t WS2812_Init(WS2812_TIMNG_CONFUG_t *config)
+esp_err_t WS2812_Init(WS2812_CONFIG_t *config)
 {
     ESP_ERROR_CHECK(config == NULL);
     if (config == NULL) return ESP_ERR_INVALID_ARG;
 
     // TODO: 检查_send_buf_x.starus == Send_Buffer_Uninitialized
 
-    memcpy(&_rmt_config, config, sizeof(WS2812_TIMNG_CONFUG_t));
+    memcpy(&_rmt_config, config, sizeof(WS2812_CONFIG_t));
 
     // 初始化缓冲区
     if (_send_buf_A.semaphore) {vSemaphoreDelete(_send_buf_A.semaphore); _send_buf_A.semaphore = NULL; } 
