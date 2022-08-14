@@ -10,7 +10,11 @@
         "gpio.h": "c",
         "esp_task.h": "c",
         "semphr.h": "c",
-        "queue.h": "c"
+        "queue.h": "c",
+        "lamp.h": "c",
+        "rmt_ws2812.h": "c",
+        "*.ipp": "c"
     },
-    "git.ignoreLimitWarning": true
+    "git.ignoreLimitWarning": true,
+    "better-comments.highlightPlainText": false
 }
