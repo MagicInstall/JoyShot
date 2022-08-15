@@ -20,12 +20,17 @@
 #endif
 
 #ifndef BUTTON_DEFAULT_DEBOUNCE           
-#define BUTTON_DEFAULT_DEBOUNCE     1000  // us
+#define BUTTON_DEFAULT_DEBOUNCE     1000  /* us */
 #endif
 
 #ifndef BUTTON_COUNT_MAX
-#define BUTTON_COUNT_MAX            2   // 驱动允许的最大按键数量
+#define BUTTON_COUNT_MAX            2   /* 驱动允许的最大按键数量 */
 #endif
+
+typedef enum { 
+    Button_On       = 0,
+    Button_Off      = 1,
+} Button_Level_t;
 
 typedef enum { 
     Button_Event_Off    = 0,
@@ -60,7 +65,7 @@ typedef struct
 #define Button_Default_Config(num, cb) {                    \
     .gpio_num = num,                                        \
     .gpio_config = {                                        \
-        .pin_bit_mask   = (1ULL << num),                    \
+        .pin_bit_mask           = (1ULL << (num)),          \
         .intr_type              = GPIO_INTR_NEGEDGE,        \
         .mode                   = GPIO_MODE_INPUT,          \
         .pull_up_en             = GPIO_PULLUP_ENABLE,       \
@@ -92,11 +97,19 @@ Button_Handle_t Button_Enable(Button_Config_t *config);
 void Button_Disable(Button_Handle_t handle);
 
 /**
- *      在启用按键后可以切换事件回调
+ *  在启用按键后可以切换事件回调
  * @param[in]   handle - 要切换回调的按键的handle.
  * @param[in]   cb     - 回调函数
  * @return      ESP_OK - success, other - failed 
  */ 
 esp_err_t Button_Set_Callback(Button_Handle_t handle, Button_Event_Callback cb);
+
+/**
+ * 不启动按键检测线程，只读取按键电位
+ * 
+ * @param gpio_num 按键的IO
+ * @return Button_Level_t
+ */
+Button_Level_t Button_Click(gpio_num_t gpio_num);
 
 #endif

@@ -177,6 +177,8 @@ esp_err_t Button_Set_Callback(Button_Handle_t handle, Button_Event_Callback cb)
 
     // 启用
     if (cb != NULL){
+        btn->button_config.callback = cb;
+        
         gpio_install_isr_service(0/*目前使用默认标志*/);
         ESP_LOGI("Button", "↑ No need to care about 'GPIO isr service already installed' ↑");
 
@@ -224,4 +226,17 @@ void Button_Disable(Button_Handle_t handle)
         _buttons[i] = _buttons[i + 1];
     }
     free(handle);
+}
+
+Button_Level_t Button_Click(gpio_num_t gpio_num) {
+    static gpio_config_t config = {
+        // .pin_bit_mask   = (1ULL << gpio_num),
+        .intr_type      = GPIO_INTR_NEGEDGE,
+        .mode           = GPIO_MODE_INPUT,
+        .pull_up_en     = GPIO_PULLUP_ENABLE,  
+    };
+    config.pin_bit_mask = (1ULL << gpio_num);
+    ESP_ERROR_CHECK(gpio_config(&config));
+
+    return gpio_get_level(gpio_num)==0 ? Button_On : Button_Event_Off;
 }
