@@ -26,13 +26,6 @@
 #include "driver/gpio.h"
 #include "esp_err.h"
 
-#ifndef WS2812_DIN_GPIO_NUM
-#error "WS2812_DIN_GPIO_NUM undefine!"
-#endif
-#ifndef WS2812_COUNT
-#error "WS2812_COUNT undefine!"
-#endif
-
 #ifndef WS2812_RMT_CHANNEL
 // 默认使用最后一个, 将前面的7个mem_block 留给其它应用
 #define WS2812_RMT_CHANNEL RMT_CHANNEL_7
@@ -42,19 +35,44 @@
 #define WS2812_RMT_CLK_DIV 2 
 #endif
 
+/**
+ *  Gamma 校正表的数据类型
+ *      
+ *      可能过以下代码自行生成gamma 表
+ * @code 
+ *      #include <math.h>
+ *      typedef unsigned char UNIT8; //用 8 位无符号数表示 0～255 之间的整数
+ *      UNIT8 g_GammaLUT[256]; //这个数组保存BuildTable() 后256个gamma校正值
+ *      //①归一化、预补偿、反归一化;
+ *      //②将结果存入 gamma 查找表。
+ *     
+ *      // @param fPrecompensation 从公式得fPrecompensation=1/gamma
+ *      void BuildTable(float fPrecompensation ) {
+ *          int i;
+ *          float f;
+ *          for( i=0;i<256;i++) {
+ *              f=(i+0.5F)/256; // 归一化
+ *              f=(float)pow(f,fPrecompensation);
+ *              g_GammaLUT[i]=(UNIT8)(f*256-0.5F); // 反归一化
+ *          }
+ *      }
+ * @endcode
+ * @return {*}
+ */
+typedef uint8_t WS2812_GAMMA_LUT[256];
 
 typedef struct 
 {
     /// 除了34及以上的只读Pin, 其它都可以
-    gpio_num_t      Output_IO_Num;
+    gpio_num_t      output_io_num;
     /// 使用的通道号
-    rmt_channel_t   RMT_Channel;
+    rmt_channel_t   rmt_channel;
     /// 当前RMT Channel 中串联的LED 数量,
     /// 该值也用于分配缓存的长度.
-    uint32_t        LEDs_Count_Max;
+    uint32_t        leds_count_max;
     /// 是否启用双缓冲
     /// 需要双倍内存, 若不是有数以百计的WS2812, 则不需要双缓冲.
-    bool            Double_Buffer;
+    bool            double_buffer;
     /// unit as ns
     uint16_t        T0H;    
     /// unit as ns
@@ -68,6 +86,26 @@ typedef struct
     /// 超过此值时高几bit 可能被截断.
     uint32_t        RES;
 } WS2812_CONFIG_t;
+
+/**
+ *  载入默认RMT配置
+ * 
+ *  5个时序经测试正常运行   wing    2022.08.18
+ * 
+ * @param[in]   gpio_num  GPIO_NUM_x
+ * @param[in]   count     该gpio_num 下串联了多少个ws2812。
+ */
+#define WS2812_Default_Config(io_num, count) {          \
+    .output_io_num      = io_num,                       \
+    .rmt_channel        = WS2812_RMT_CHANNEL,           \
+    .leds_count_max     = count,                        \
+    .double_buffer      = false,                        \
+    .T0H                = 300,                          \
+    .T0L                = 800,                          \
+    .T1H                = 800,                          \
+    .T1L                = 800,                          \
+    .RES                = 200000,                       \
+}
 
 /**
  *  方便分量设置RGB值的结构体
@@ -87,7 +125,7 @@ typedef union
  * 取ws2812 的默认配置
  * @return 返回配置结构体的指针。
  */
-const WS2812_CONFIG_t * WS2812_DEFAULT_CONFIG(void);
+// const WS2812_CONFIG_t * WS2812_DEFAULT_CONFIG(void);
 
 /**
  * 初始化WS2812 
@@ -127,6 +165,18 @@ esp_err_t WS2812_Refresh(bool wait, TickType_t xTicksToWait);
  */
 esp_err_t WS2812_Send_LEDs(WS2812_COLOR_t *colors, uint32_t count);
 
+typedef enum { 
+    WS2812_Event_Before_Refresh,    // 将要刷新
+    WS2812_Event_After_Refresh,     // 刚刷新过
+} WS2812_Event_t;
+
+/**
+ *  事件回调
+ * @param val
+ * @return {*}
+ */
+typedef void (*WS2812_Event_Callback) (WS2812_Event_t val);
+
 /**
  *  打开周期自动刷新
  * 
@@ -139,13 +189,32 @@ esp_err_t WS2812_Send_LEDs(WS2812_COLOR_t *colors, uint32_t count);
  *  只需直接再WS2812_Loop_Start() 一次就行,
  *  不用WS2812_Loop_Stop().
  * 
+ *  注意：
+ *      启动自动刷新后的第一次刷新是在(1000000 / Hz)us后，
+ *      视觉上一般感觉不到；
+ *      但若要立即刷新，可手动WS2812_Send_LEDs()一次。
+ * 
  *  @param[in] Hz - 每秒刷新率, 一般25Hz足够, 
  *                  建议使用能被1000000 整除的刷新率, 相对会准确一些.
  * 
  */
-esp_err_t WS2812_Loop_Start(uint16_t Hz);
+esp_err_t WS2812_Loop_Start(uint16_t Hz, WS2812_Event_Callback cb);
 
-/** 停止自动刷新 */
+/** 
+ *  停止自动刷新 
+ */
 esp_err_t WS2812_Loop_Stop(void);
+
+/**
+ *  启用Gamma校正
+ *  
+ * @param lut 校正表：传入NULL 则使用驱动自带的校正表。
+ */
+void WS2812_Gamma_On(WS2812_GAMMA_LUT lut);
+
+/**
+ *  禁用Gamma校正
+ */
+void WS2812_Gamma_Off(void);
 
 #endif
