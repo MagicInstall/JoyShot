@@ -13,6 +13,13 @@
 #include "esp_err.h"
 #include "esp_bt_defs.h"
 
+#ifndef NS_CONTROLLER_TASK_CORE_ID
+#define NS_CONTROLLER_TASK_CORE_ID      1
+#endif
+#ifndef NS_CONTROLLER_TASK_PRIORITY
+#define NS_CONTROLLER_TASK_PRIORITY     2
+#endif
+
 typedef enum 
 {
     Left_Joycon     = 1,

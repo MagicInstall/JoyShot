@@ -462,7 +462,7 @@ static void _connection_cb(esp_bd_addr_t bd_addr, esp_hidd_connection_state_t st
             vTaskDelete(SendingHandle);
             SendingHandle = NULL;
         }
-        xTaskCreatePinnedToCore(_send_task, "send_task", 2048, NULL, 2, &SendingHandle, 0);
+        xTaskCreatePinnedToCore(_send_task, "send_task", 2048, NULL, NS_CONTROLLER_TASK_PRIORITY, &SendingHandle, NS_CONTROLLER_TASK_CORE_ID);
         _callback(NS_CONTROLLER_CONNECTED_EVT, NULL);
         break;
     case ESP_HIDD_CONN_STATE_CONNECTING:
