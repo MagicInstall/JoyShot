@@ -1,11 +1,3 @@
-/*
- * @Author: wing zlcnkkm@21cn.com
- * @Date: 2021-09-05 01:27:23
- * @LastEditors: wing zlcnkkm@21cn.com
- * @LastEditTime: 2022-08-18 17:30:18
- * @FilePath: /JoyShot/src/lamp.c
- * @Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
- */
 /**
  *  使用WS2812 LED 显示各种信息
  * 
@@ -18,91 +10,17 @@
 
 static const char *TAG = "Lamp";
 
-static bool _is_on = false;
-
-// static Lamp_Correction_t _gamma = {1.0, 1.0, 1.0};
-
-esp_err_t Lamp_Init(Lamp_Config_t *config) {
+esp_err_t Lamp_Init(WS2812_CONFIG_t *ws2812_config, CPC405x_LDO_Config_t *ldo_config) {
 	ESP_LOGI(TAG, "Init");
-	_is_on = false;
 
-	esp_err_t ret;
-    // 使用LEDC 驱动CPC405x
-    ledc_timer_config_t ledc_timer = {
-		.speed_mode		 = CPC405X_PWM_SPEED_MODE,	// 速度模式
-		.timer_num       = CPC405X_PWM_TIMER, 		// 定时器
-		.duty_resolution = CPC405X_PWM_RESOLUTION, 	// 占空比分辨率
-		.freq_hz 		 = CPC405X_PWM_FREQ,        // PWM 频率
-		.clk_cfg 		 = LEDC_AUTO_CLK,//CPC405X_PWM_CLK_CFG,
-	};
-	ret = ledc_timer_config(&ledc_timer);
-	if (ret != ESP_OK) return ret;
-
-	ledc_channel_config_t ledc_channel = {
-		.speed_mode = CPC405X_PWM_SPEED_MODE,
-		.channel    = CPC405X_PWM_CHANNEL,
-		.timer_sel  = CPC405X_PWM_TIMER,
-        .intr_type	= LEDC_INTR_DISABLE,
-		.gpio_num   = 25,
-		.duty       = 0,
-		.hpoint     = 0,
-	};
-    ret = ledc_channel_config(&ledc_channel);
-	if (ret != ESP_OK) return ret;
-
-	ret = ledc_set_duty(CPC405X_PWM_SPEED_MODE, CPC405X_PWM_CHANNEL, 4095);
+	esp_err_t ret = CPC405x_LDO_Init(ldo_config);
 	if (ret != ESP_OK) return ret;
 	
-
-    // ESP_ERROR_CHECK(WS2812_Init(&config->ws2812));
-    // vTaskDelay(config->ws2812.RES/ 1000 / portTICK_RATE_MS);
-    // ESP_ERROR_CHECK(WS2812_Loop_Start(25));
-
-	WS2812_CONFIG_t ws2812_congif = WS2812_Default_Config(WS2812_DIN_GPIO_NUM, WS2812_COUNT);
-	return WS2812_Init(&ws2812_congif);
+	return WS2812_Init(ws2812_config);
 }
-
-// void Lamp_Set_Correction(Lamp_Correction_t *corr) {
-// 	_gamma.b = corr->b > 1.0 ? 1.0 : corr->b;
-// 	_gamma.g = corr->g > 1.0 ? 1.0 : corr->g;
-// 	_gamma.r = corr->r > 1.0 ? 1.0 : corr->r;
-// }
-
-esp_err_t Lamp_On(uint32_t delay) {
-	esp_err_t ret;
-
-	ret = ledc_update_duty(CPC405X_PWM_SPEED_MODE, CPC405X_PWM_CHANNEL);
-	if (ret != ESP_OK) return ret;
-
-	_is_on = true;
-	if (delay > 0) vTaskDelay(delay / portTICK_RATE_MS);
-	return ESP_OK;
-}
-
-esp_err_t Lamp_Off(void) {
-	_is_on = false;
-	return ledc_stop(CPC405X_PWM_SPEED_MODE, CPC405X_PWM_CHANNEL, 0/*设置为低电平*/);
-}
-
-// /**
-//  * 色彩校正
-//  * @param destin	指向校正后颜色数据的目标数组。
-//  * @param source	指向将要校正颜色源数据。
-//  * @param n			被校正的颜色数
-//  * @return {*}
-//  */
-// static void _color_correction(WS2812_COLOR_t *destin, WS2812_COLOR_t *source, uint32_t n) {
-// 	for (size_t i = 0; i < n; i++) {
-// 		destin[i].b = (uint8_t)((float)(source[i].b) * _gamma.b);
-// 		destin[i].g = (uint8_t)((float)(source[i].g) * _gamma.g);
-// 		destin[i].r = (uint8_t)((float)(source[i].r) * _gamma.r);
-// 	}
-// }
 
 esp_err_t Lamp_Set_Single_Color(WS2812_COLOR_t *color) {
-	esp_err_t ret = ESP_OK;
-
-	if (!_is_on) ret = Lamp_On(CPC405X_LDO_UP_DELAY);
+	esp_err_t ret = Lamp_On();
 	if (ret != ESP_OK) return ret;
 
 	static WS2812_COLOR_t buf[WS2812_COUNT];
@@ -348,8 +266,7 @@ esp_err_t Lamp_Effect_Start(Lamp_Effect_t *effect) {
 	xSemaphoreGive(effect->semaphore);
 
 	// 打开电源
-	esp_err_t ret = ESP_OK;
-	if (!_is_on) ret = Lamp_On(CPC405X_LDO_UP_DELAY);
+	esp_err_t ret = Lamp_On();
 	if (ret != ESP_OK) return ret;
 
 	//----------------------------------------------------

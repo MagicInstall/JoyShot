@@ -2,118 +2,81 @@
  *  使用WS2812 LED 显示各种信息,
  *  封装了WS2812 驱动以及CPC405x 电源管理。
  * 
- *  2021-09-05    wing    创建.
+ *  2021-09-05      wing    创建.
+ *  2022-08-18      wing    增加动态光效。
  */
 
 #ifndef LAMP_H
 #define LAMP_H
 
 #include "rmt_ws2812.h"
-#include "driver/ledc.h"
+#include "cpc405x.h"
 #include "freertos/semphr.h"
 
 #ifndef CPC405x_EN_GPIO_NUM
 #error "CPC405x_EN_GPIO_NUM undefine!"
 #endif
+#ifndef CPC405x_LDO_NUM
+#define CPC405x_LDO_NUM CPC405x_LDO_1
+#endif
 
-#ifndef CPC405X_PWM_FREQ
-#define CPC405X_PWM_FREQ        1000     
+#ifndef WS2812_DIN_GPIO_NUM
+#error "WS2812_DIN_GPIO_NUM undefine!"
 #endif
-#ifndef CPC405X_PWM_RESOLUTION
-#define CPC405X_PWM_RESOLUTION  LEDC_TIMER_13_BIT
-#endif
-#ifndef CPC405X_PWM_SPEED_MODE
-#define CPC405X_PWM_SPEED_MODE  LEDC_LOW_SPEED_MODE
-#endif
-#ifndef CPC405X_PWM_TIMER
-#define CPC405X_PWM_TIMER       LEDC_TIMER_3
-#endif
-// #ifndef CPC405X_PWM_CLK_CFG
-// #define CPC405X_PWM_CLK_CFG     LEDC_AUTO_CLK
-// #endif
-#ifndef CPC405X_PWM_CHANNEL
-#define CPC405X_PWM_CHANNEL     LEDC_CHANNEL_7
+#ifndef WS2812_COUNT
+#error "WS2812_COUNT undefine!"
 #endif
 
 // 若CPC405X_PWM_FREQ设置为1000(hz)，最少需要8ms 才能上升至VCC(3.3v) ，
 // 再要加上WS2812 的启动时间约2ms
-#define CPC405X_LDO_UP_DELAY    10
+#define CPC405X_LDO_UP_DELAY    (10)
 
-typedef struct 
-{
-    WS2812_CONFIG_t ws2812;
 
-    struct
-    {
-        /// 除了34及以上的只读Pin, 其它都可以
-        gpio_num_t      output_io_num;
- 
-        /// LEDC 使用高速或低速通道
-        ledc_mode_t     speed_mode;
 
-        /// LEDC 高速和低速各有4个定时器(0 - 3)
-        ledc_timer_t    timer_num;
 
-        /// LEDC 输出通道
-        ledc_channel_t  channel;
-
-        /// 使用哪个时钟源；只有LEDC_USE_RTC8M_CLK 可以在休眠的时候继续运行；可以简单使用LEDC_AUTO_CLK。
-        ledc_clk_cfg_t  clk_cfg;
-
-        /// PWM 信号的频率
-        uint32_t        freq_hz;
-
-        /// 占空比分辨率位宽
-        ledc_timer_bit_t duty_resolution;
-    } cpc405x;
-    
-} Lamp_Config_t;
-
-// /**
-//  * 色彩校正结构体
-//  */
-// typedef struct
+// typedef struct 
 // {
-//     float b, g, r;
-// } Lamp_Correction_t ;
+//     WS2812_CONFIG_t ws2812;
+
+//     struct
+//     {
+//         /// 除了34及以上的只读Pin, 其它都可以
+//         gpio_num_t      output_io_num;
+ 
+//         /// LEDC 使用高速或低速通道
+//         ledc_mode_t     speed_mode;
+
+//         /// LEDC 高速和低速各有4个定时器(0 - 3)
+//         ledc_timer_t    timer_num;
+
+//         /// LEDC 输出通道
+//         ledc_channel_t  channel;
+
+//         /// 使用哪个时钟源；只有LEDC_USE_RTC8M_CLK 可以在休眠的时候继续运行；可以简单使用LEDC_AUTO_CLK。
+//         ledc_clk_cfg_t  clk_cfg;
+
+//         /// PWM 信号的频率
+//         uint32_t        freq_hz;
+
+//         /// 占空比分辨率位宽
+//         ledc_timer_bit_t duty_resolution;
+//     } cpc405x;
+    
+// } Lamp_Config_t;
 
 
 /**
  * 灯带控制初始化
- * @param config 
+ * 
+ * @param ws2812_config 
+ * @param cpc405x_config 
+ * 
  * @return 返回ESP_OK 表示完成初始化。
  */
-esp_err_t Lamp_Init(Lamp_Config_t *config);
+esp_err_t Lamp_Init(WS2812_CONFIG_t *ws2812_config, CPC405x_LDO_Config_t *cpc405x_config);
 
-// /**
-//  * 设置颜色校正值
-//  * @param corr 若传入的某个分量的值大于1.0，则强制为1.0 。
-//  */
-// void Lamp_Set_Correction(Lamp_Correction_t *corr);
-
-/**
- * 通过电源管理IC为LED供电
- * 
- * 该方法非线程安全，多线程必须手动协调！
- * 
- * @param delay CPC405x需要多个脉冲逐级抬升输出电压，
- *              该参数会让本方法在开启LEDC脉冲输出后，
- *              让线程暂停若干毫秒才返回。
- *              实测在LEDC频率为1000hz的时候，
- *              需要约8ms 将输出电压抬升到VCC（3.3v)；
- *              可直接使用CPC405X_LDO_UP_DELAY 宏。
- * @return 返回ESP_OK 表示电压输出完成。
- */
-esp_err_t Lamp_On(uint32_t delay);
-
-/**
- * 通过电源管理IC断开LED供电
- * 
- * @return 返回ESP_OK 表示已让CPC405x停止供电；
- *         CPC405x不会立即断电，而是在5ms后才停止供电（
- *         加上大电容储能大约需要100ms才降到0v）。
- */
-esp_err_t Lamp_Off(void);
+#define Lamp_On()       CPC405x_LDO_On(CPC405X_LDO_UP_DELAY, CPC405x_LDO_NUM)
+#define Lamp_Off()      CPC405x_LDO_Off(CPC405x_LDO_NUM)
 
 /**
  * 让全部ws2812显示同一个颜色
@@ -123,6 +86,8 @@ esp_err_t Lamp_Off(void);
  */
 esp_err_t Lamp_Set_Single_Color(WS2812_COLOR_t *color);
 
+#define Lamp_Gamma_On(lut)      WS2812_Gamma_On(lut)
+#define Lamp_Gamma_Off()        WS2812_Gamma_Off()
 
 /**
  * 动态光效帧的计数模式
@@ -224,13 +189,5 @@ esp_err_t Lamp_Effect_Stop(void);
  * @return 返回ESP_OK 表示填充完成。
  */
 // esp_err_t Lamp_Fill_Buffer(WS2812_COLOR_t *color);
-
-/**
- *  LEDC 占空比分辨率最大位宽计算工具
- * @param config 除duty_resolution成员外，
- *               cpc405x下其余的成员先设置好期待值后再调用本方法传入。
- * @return 若返回0 则表示
- */
-ledc_timer_bit_t Lamp_LEDC_Duty_Resolution_Tool(Lamp_Config_t *config);
 
 #endif

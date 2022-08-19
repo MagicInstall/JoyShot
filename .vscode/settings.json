@@ -13,7 +13,17 @@
         "queue.h": "c",
         "lamp.h": "c",
         "rmt_ws2812.h": "c",
-        "*.ipp": "c"
+        "*.ipp": "c",
+        "ratio": "c",
+        "atomic": "c",
+        "cstdint": "c",
+        "random": "c",
+        "*.tcc": "c",
+        "chrono": "c",
+        "algorithm": "c",
+        "ledc.h": "c",
+        "task.h": "c",
+        "uart_command.h": "c"
     },
     "git.ignoreLimitWarning": true,
     "better-comments.highlightPlainText": false
