@@ -237,6 +237,6 @@ Button_Level_t Button_Click(gpio_num_t gpio_num) {
     };
     config.pin_bit_mask = (1ULL << gpio_num);
     ESP_ERROR_CHECK(gpio_config(&config));
-
-    return gpio_get_level(gpio_num)==0 ? Button_On : Button_Event_Off;
+    
+    return gpio_get_level(gpio_num)==0 ? Button_On : Button_Off;
 }
