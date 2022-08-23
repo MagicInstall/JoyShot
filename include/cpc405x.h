@@ -13,6 +13,20 @@
 #define CPC405X_H
 
 #include "driver/ledc.h"
+#include "hal/adc_types.h"
+
+#ifndef BATTERY_ADC_ATTEN
+#define BATTERY_ADC_ATTEN   ADC_ATTEN_DB_11 /* 2.6V max */
+#endif
+
+#ifndef BATTERY_ADC_WIDTH
+// ADC位宽
+#define BATTERY_ADC_WIDTH   ADC_WIDTH_BIT_12
+#endif
+
+// ADC 平均值滤波的采样次数为
+// 2 的BATTERY_ADC_FILTER_POWER 次幂(2 ^ BATTERY_ADC_FILTER_POWER)
+#define BATTERY_ADC_FILTER_POWER    (2)
 
 /**
  *  载入默认LEDC配置
@@ -28,7 +42,7 @@
     .channel            = LEDC_CHANNEL_7,           \
     .clk_cfg            = LEDC_AUTO_CLK,            \
     .freq_hz            = (1000),                   \
-    .duty_resolution    = LEDC_TIMER_13_BIT         \
+    .duty_resolution    = LEDC_TIMER_16_BIT         \
 }
 
 // 可调电压的LDO通道号
@@ -65,19 +79,62 @@ typedef struct {
     ledc_timer_bit_t duty_resolution;
 } CPC405x_LDO_Config_t;
 
+
+/**
+ *  插拔充电事件
+ * @return {*}
+ */
+typedef enum { 
+    CPC405X_CHARGE_EVENT_UNCHARG,       // 拔充电器
+    CPC405X_CHARGE_EVENT_CHARGING,      // 插充电器
+} CPC405x_Charge_Event_t;
+
+/**
+ *  插拔充电事件回调
+ * @param val
+ * @return {*}
+ */
+typedef void (*CPC405x_Charge_Event_Callback) (CPC405x_Charge_Event_t val);
+
+/**
+ *  电量变化事件
+ * @param val 
+ * @return {*}
+ */
+typedef void (*CPC405x_Level_Event_Callback) (int val);
+
+
+/**
+ *  充电功能配置结构体
+ */
 typedef struct {
-    // LDO 配置
-    CPC405x_LDO_Config_t ldo[2];
-
     /// 充电状态读取引脚
-    gpio_num_t      status_io_num;
+    gpio_num_t                      status_io_num;
 
-    /// 电池电量ADC引脚
-    gpio_num_t      adc_io_num;
+    CPC405x_Charge_Event_Callback   charge_cb;
+
+    /// 电池电量ADC 通道，
+    /// 具体连接到哪个io引脚需要查阅官方文档
+    adc_channel_t                   adc_channel;
+
+    /// 电池电量ADC 通道单元
+    adc_unit_t                      adc_unit;
+    
+    CPC405x_Level_Event_Callback    level_cb;
+
+    // 电量采样时间间隔，单位是分钟。
+    uint16_t                        adc_interval;
 
 
-} CPC405x_Config_t;
+} CPC405x_Battery_Config_t;
 
+/**
+ *  初始化电池功能
+ * 
+ * @param config
+ * @return 返回ESP_OK 表示初始化完成。
+ */
+esp_err_t CPC405x_Battery_Init(CPC405x_Battery_Config_t *config);
 
 /**
  *  初始化一个可调LDO通道

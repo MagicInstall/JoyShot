@@ -10,13 +10,25 @@
 
 static const char *TAG = "Lamp";
 
+static bool _initialized = false;
+
 esp_err_t Lamp_Init(WS2812_CONFIG_t *ws2812_config, CPC405x_LDO_Config_t *ldo_config) {
 	ESP_LOGI(TAG, "Init");
 
 	esp_err_t ret = CPC405x_LDO_Init(ldo_config);
 	if (ret != ESP_OK) return ret;
 	
-	return WS2812_Init(ws2812_config);
+	ret = WS2812_Init(ws2812_config);
+	if (ret != ESP_OK) return ret;
+
+	_initialized = true;
+	
+	// 启动一次自动刷新，
+	// 让自动刷新器内部的定时器在本核心程内创建，
+	// 从而将定时器的中断固定在本核心。
+	ret = WS2812_Loop_Start(1, NULL);
+	if (ret != ESP_OK) return ret;
+	return WS2812_Loop_Stop();
 }
 
 esp_err_t Lamp_Set_Single_Color(WS2812_COLOR_t *color) {
@@ -40,6 +52,7 @@ static void _effect_task(WS2812_Event_t val) {
 	switch (val) {
 		// 将要刷新
 		case WS2812_Event_Before_Refresh:
+			// 取锁
 			xSemaphoreTake(_effect->semaphore, portMAX_DELAY);
 			break;
 
@@ -113,6 +126,8 @@ static void _effect_task(WS2812_Event_t val) {
 			if (_effect->frames[_effect->current] != LAMP_EFFECT_HOLDER_FRAME)
 				// 提前输出下一帧到缓冲区
 				ESP_ERROR_CHECK(WS2812_Fill_Buffer(_effect->table + _effect->frames[_effect->current], WS2812_COUNT));
+			
+			// 还锁
 			xSemaphoreGive(_effect->semaphore);	
 			break;
 		
@@ -127,6 +142,8 @@ static void _effect_task(WS2812_Event_t val) {
  *  由于LAMP_EFFECT_STATE_MODE_PAUSE_ADD_ELAPSED 模式
  * 	计算从哪帧开始的过程代码比较长，
  *  因此将该过程拆分出来以便阅读。
+ * 
+ * 	TODO: 未测试...
  * 
  * @return 当方法返回的时候，effect->current已经被设置好，
  * 		   此返回值只是简单返回effect->current，不需要再赋值给effect->current。
@@ -236,6 +253,12 @@ esp_err_t Lamp_Effect_Start(Lamp_Effect_t *effect) {
 	ESP_ERROR_CHECK(effect->frames == NULL);
 	ESP_ERROR_CHECK(effect->table == NULL);
 
+	// TODO: 测试用
+	while (_initialized == false)
+	{
+		ESP_LOGW(TAG, "Init not completed...");
+	}
+	
 	// if (_effect_task_handle) Lamp_Effect_Stop();
 
 	// 取锁

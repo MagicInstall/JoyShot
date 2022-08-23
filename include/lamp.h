@@ -32,39 +32,6 @@
 #define CPC405X_LDO_UP_DELAY    (10)
 
 
-
-
-// typedef struct 
-// {
-//     WS2812_CONFIG_t ws2812;
-
-//     struct
-//     {
-//         /// 除了34及以上的只读Pin, 其它都可以
-//         gpio_num_t      output_io_num;
- 
-//         /// LEDC 使用高速或低速通道
-//         ledc_mode_t     speed_mode;
-
-//         /// LEDC 高速和低速各有4个定时器(0 - 3)
-//         ledc_timer_t    timer_num;
-
-//         /// LEDC 输出通道
-//         ledc_channel_t  channel;
-
-//         /// 使用哪个时钟源；只有LEDC_USE_RTC8M_CLK 可以在休眠的时候继续运行；可以简单使用LEDC_AUTO_CLK。
-//         ledc_clk_cfg_t  clk_cfg;
-
-//         /// PWM 信号的频率
-//         uint32_t        freq_hz;
-
-//         /// 占空比分辨率位宽
-//         ledc_timer_bit_t duty_resolution;
-//     } cpc405x;
-    
-// } Lamp_Config_t;
-
-
 /**
  * 灯带控制初始化
  * 
@@ -179,15 +146,5 @@ esp_err_t Lamp_Effect_Start(Lamp_Effect_t *effect);
  * @return 返回ESP_OK 表示动态光效停止。
  */
 esp_err_t Lamp_Effect_Stop(void);
-
-/**
- * 封装WS2812_Fill_Buffer()方法，
- * 在Lamp_Loop_Start()开启自动刷新后，
- * 向缓冲区填充数据。
- * 
- * @param color
- * @return 返回ESP_OK 表示填充完成。
- */
-// esp_err_t Lamp_Fill_Buffer(WS2812_COLOR_t *color);
 
 #endif
