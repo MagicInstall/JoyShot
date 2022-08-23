@@ -1106,16 +1106,20 @@ esp_err_t NS_Open(esp_bd_addr_t bd_addr)
 
 void NS_Set_Battery(NS_Battery_Level_t level)
 {
-    xSemaphoreTake(xSemaphore, portMAX_DELAY);
+    // 允许在锁初始化前设置
+    bool have_lock = xSemaphore == NULL ? false : true;
+    if (have_lock) xSemaphoreTake(xSemaphore, portMAX_DELAY);
     _standard_buff.battery = level;
-    xSemaphoreGive(xSemaphore);
+    if (have_lock) xSemaphoreGive(xSemaphore);
 }
 
 void NS_Set_Charging(bool charging)
 {
-    xSemaphoreTake(xSemaphore, portMAX_DELAY);
+    // 允许在锁初始化前设置
+    bool have_lock = xSemaphore == NULL ? false : true;
+    if (have_lock) xSemaphoreTake(xSemaphore, portMAX_DELAY);
     _standard_buff.Charging = charging;
-    xSemaphoreGive(xSemaphore);
+    if (have_lock) xSemaphoreGive(xSemaphore);
 }
 
 void NS_Set_Buttons(ns_button_status_t *status)
