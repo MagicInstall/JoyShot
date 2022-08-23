@@ -14,7 +14,7 @@
 #include "esp_bt_defs.h"
 
 #ifndef NS_CONTROLLER_TASK_CORE_ID
-#define NS_CONTROLLER_TASK_CORE_ID      0
+#define NS_CONTROLLER_TASK_CORE_ID      1
 #endif
 #ifndef NS_CONTROLLER_TASK_PRIORITY
 #define NS_CONTROLLER_TASK_PRIORITY     2
