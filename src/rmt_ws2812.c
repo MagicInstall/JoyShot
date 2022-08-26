@@ -336,7 +336,15 @@ esp_err_t WS2812_Loop_Start(uint16_t Hz, WS2812_Event_Callback cb)
         ESP_ERROR_CHECK(esp_timer_create(&timer_arg, &_timer_handle));
     }
 
-    return esp_timer_start_periodic(_timer_handle, us);
+    esp_err_t res = esp_timer_start_periodic(_timer_handle, us);
+    if ( res == ESP_ERR_INVALID_STATE) {
+        // 正在运行的要先停掉再重新开
+        res = esp_timer_stop(_timer_handle);
+        if (res) return res;
+        res = esp_timer_start_periodic(_timer_handle, us);
+    }
+
+    return res;
 }
 esp_err_t WS2812_Loop_Stop(void)
 {
