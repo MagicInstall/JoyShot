@@ -413,7 +413,7 @@ static void _send_task(void *pvParameters)
                 vTaskDelay(15);            
             } 
         }
-        else vTaskDelay(100);
+        else vTaskDelay(500);
     }
 }
 
