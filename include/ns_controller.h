@@ -127,7 +127,22 @@ typedef union
 
     struct
     {
-        uint8_t         player;     // 1 - 4 号
+        union 
+        {
+            struct {
+                bool         light_1    : 1;     
+                bool         light_2    : 1;     
+                bool         light_3    : 1;     
+                bool         light_4    : 1;     
+
+                bool         flash_1    : 1;     
+                bool         flash_2    : 1;     
+                bool         flash_3    : 1;     
+                bool         flash_4    : 1;     
+            };
+
+            uint8_t         lights;
+        };
     } Player_Lights;    
 } NS_CONTROLLER_EVT_ARG_t;
 
