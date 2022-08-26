@@ -386,7 +386,7 @@ static uint8_t emptyReport[] = {0x00, 0x00};
 static void _send_task(void *pvParameters)
 {
     ESP_LOGI("send_task", "Sending hid reports on core %d\n", xPortGetCoreID());
-    const uint8_t SEND_ID = 0xA1;//0x30;
+    // const uint8_t SEND_ID = 0xA1;//0x30;
 
     while (1)
     {
@@ -400,14 +400,14 @@ static void _send_task(void *pvParameters)
             {
                 // 在paired = true 之前需要不断发送一个0x00 到report 0 ?
                 // 不然后面的intr_data_cb 事件不会触发!
-                esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, SEND_ID, sizeof(emptyReport), emptyReport);
+                esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0xA1, sizeof(emptyReport), emptyReport);
                 vTaskDelay(100);
             }
             else 
             {
                 xSemaphoreTake(xSemaphore, portMAX_DELAY);
-                // // _standard_buff.ask = 0x08;
-                esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, SEND_ID, sizeof(standard_data_t), (uint8_t *)&_standard_buff);
+                // _standard_buff.ask = 0x08;
+                esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, 0x30, sizeof(standard_data_t), (uint8_t *)&_standard_buff);
                 _standard_buff.timer ++;
                 xSemaphoreGive(xSemaphore);
                 vTaskDelay(15);            
@@ -446,11 +446,6 @@ static void _connection_cb(esp_bd_addr_t bd_addr, esp_hidd_connection_state_t st
                  bd_addr[0], bd_addr[1], bd_addr[2], bd_addr[3], bd_addr[4], bd_addr[5]);
         ESP_LOGI(CONN_TAG, "setting bluetooth non connectable");
         esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
-
-        // //clear blinking LED - solid
-        // vTaskDelete(BlinkHandle);
-        // BlinkHandle = NULL;
-        // gpio_set_level(LED_GPIO, 1);
 
         //start solid
         xSemaphoreTake(xSemaphore, portMAX_DELAY);
@@ -697,6 +692,11 @@ static void _intr_data_cb(uint8_t report_id, uint16_t len, uint8_t *p_data)
                 _send_reply(reply30, sizeof(reply30)); 
                 // 设置已配对, 开始发送按键
                 paired = 1;
+                {
+                    static NS_CONTROLLER_EVT_ARG_t arg;
+                    arg.Player_Lights.player = reply30[14];
+                    _callback(NS_CONTROLLER_PLAYER_LIGHTS_EVT, &arg);
+                }
                 // esp_hid_device_send_report(ESP_HIDD_REPORT_TYPE_INTRDATA, REPLT_ID, sizeof(reply30), reply30);
             // else break;
             return;
@@ -904,7 +904,9 @@ static void _esp_bt_gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *p
             ESP_LOGI(GAP_TAG, "authentication success: %s", param->auth_cmpl.device_name);
             esp_log_buffer_hex(GAP_TAG, param->auth_cmpl.bda, ESP_BD_ADDR_LEN);
 
-            _callback(NS_CONTROLLER_SCANNED_DEVICE_EVT, param->auth_cmpl.bda);
+            NS_CONTROLLER_EVT_ARG_t arg;
+            memcpy(&(arg.Scanned_device.addr), &(param->auth_cmpl.bda), sizeof(esp_bd_addr_t));
+            _callback(NS_CONTROLLER_SCANNED_DEVICE_EVT, &arg);
         }
         else
         {

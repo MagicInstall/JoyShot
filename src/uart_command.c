@@ -10,8 +10,8 @@
 
 static const char *TAG = "UART_COMM";
 
-static NS_Controller_Type_t _joy_type;
-static ns_button_status_t keys_data;
+static NS_Controller_Type_t _joy_type = Left_Joycon; // TODO: 暂时简单设置默认值
+static ns_button_status_t _keys_data;
 
 #define KEY_MASK_Y          0b00000001
 #define KEY_MASK_X          0b00000010
@@ -39,15 +39,15 @@ static ns_button_status_t keys_data;
 #define KEY_MASK_ZL         (0b10000000 << 16)
 
 #define UART_SET_KEY(keys) {                                \
-    keys_data.button_status_1 |= keys & 0xFF;               \
-    keys_data.button_status_2 |= (keys & 0xFF00) >> 8;      \
-    keys_data.button_status_2 |= (keys & 0xFF0000) >> 16;   \
+    _keys_data.button_status_1 |= keys & 0xFF;               \
+    _keys_data.button_status_2 |= (keys & 0xFF00) >> 8;      \
+    _keys_data.button_status_3 |= (keys & 0xFF0000) >> 16;   \
 }
 
 #define UART_RES_KEY(keys) {                                \
-    keys_data.button_status_1 &= ~(keys & 0xFF);            \
-    keys_data.button_status_2 &= ~((keys & 0xFF00) >> 8);   \
-    keys_data.button_status_2 &= ~((keys & 0xFF0000) >> 16);\
+    _keys_data.button_status_1 &= ~(keys & 0xFF);            \
+    _keys_data.button_status_2 &= ~((keys & 0xFF00) >> 8);   \
+    _keys_data.button_status_3 &= ~((keys & 0xFF0000) >> 16);\
 }
 
 //いずれamiibo実装するならここ拡張するかも
@@ -80,15 +80,39 @@ static void _uart_rx_task()
         // ESP_LOGI(TAG, "%s", data);
         r_key = 0;
         press = false;
+
+        
         switch (data[0])
         {
+        /* -------- 基本命令以'j'开头 -------- */
+        case 'j':
+        case 'J':
+            switch (data[1])
+            {
+            // 设置手柄类型
+            case 't':
+            case 'T':
+                switch (data[2])
+                {
+                case '1': _joy_type = Left_Joycon; break;
+                case '2': _joy_type = Right_Joycon; break;
+                case '3': _joy_type = Switch_pro; break;
+                default: ESP_LOGI(TAG, "Unknow Joy Type: %c", data[2]); break;
+                }
+                break;
+            
+            default: ESP_LOGI(TAG, "Unknow command: %c(0x%X)", data[1], data[1]); break;
+            }
+            break;
+        
+        /* -------- 以下是发送按键的命令 -------- */
         case 'y':
         case 'Y':
             switch (data[1])
             {
-            case 'p': case 'P': r_key = KEY_MASK_Y; press = true;
-            case '1': keys_data.Y = 1; break;
-            case '0': keys_data.Y = 0; break;
+            case 'p': case 'P': r_key = KEY_MASK_Y; press = true; __attribute__ ((fallthrough));
+            case '1': _keys_data.Y = 1; break;
+            case '0': _keys_data.Y = 0; break;
             default: ESP_LOGI(TAG, "Y error: %c(0x%X)", data[1], data[1]); break;
             }
             break;
@@ -96,9 +120,9 @@ static void _uart_rx_task()
         case 'X':
             switch (data[1])
             {
-            case 'p': case 'P': r_key = KEY_MASK_X; press = true;
-            case '1': keys_data.X = 1; break;
-            case '0': keys_data.X = 0; break;
+            case 'p': case 'P': r_key = KEY_MASK_X; press = true; __attribute__ ((fallthrough));
+            case '1': _keys_data.X = 1; break;
+            case '0': _keys_data.X = 0; break;
             default: ESP_LOGI(TAG, "X error: %c(0x%X)", data[1], data[1]); break;
             }
             break;
@@ -106,9 +130,9 @@ static void _uart_rx_task()
         case 'B':
             switch (data[1])
             {
-            case 'p': case 'P': r_key = KEY_MASK_B; press = true;
-            case '1': keys_data.B = 1; break;
-            case '0': keys_data.B = 0; break;
+            case 'p': case 'P': r_key = KEY_MASK_B; press = true; __attribute__ ((fallthrough));
+            case '1': _keys_data.B = 1; break;
+            case '0': _keys_data.B = 0; break;
             default: ESP_LOGI(TAG, "B error: %c(0x%X)", data[1], data[1]); break;
             }
             break;
@@ -116,45 +140,45 @@ static void _uart_rx_task()
         case 'A':
             switch (data[1])
             {
-            case 'p': case 'P': r_key = KEY_MASK_A; press = true;
-            case '1': keys_data.A = 1; break;
-            case '0': keys_data.A = 0; break;
+            case 'p': case 'P': r_key = KEY_MASK_A; press = true; __attribute__ ((fallthrough));
+            case '1': _keys_data.A = 1; break;
+            case '0': _keys_data.A = 0; break;
             default: ESP_LOGI(TAG, "A error: %c(0x%X)", data[1], data[1]); break;
             }
             break;
         case 'v':
             switch (data[1])
             {
-            case 'p': case 'P': r_key = KEY_MASK_Down; press = true;
-            case '1': keys_data.Down = 1; break;
-            case '0': keys_data.Down = 0; break;
+            case 'p': case 'P': r_key = KEY_MASK_Down; press = true; __attribute__ ((fallthrough));
+            case '1': _keys_data.Down = 1; break;
+            case '0': _keys_data.Down = 0; break;
             default: ESP_LOGI(TAG, "Down error: %c(0x%X)", data[1], data[1]); break;
             }
             break;
         case '^':
             switch (data[1])
             {
-            case 'p': case 'P': r_key = KEY_MASK_Up; press = true;
-            case '1': keys_data.Up = 1; break;
-            case '0': keys_data.Up = 0; break;
+            case 'p': case 'P': r_key = KEY_MASK_Up; press = true; __attribute__ ((fallthrough));
+            case '1': _keys_data.Up = 1; break;
+            case '0': _keys_data.Up = 0; break;
             default: ESP_LOGI(TAG, "Up error: %c(0x%X)", data[1], data[1]); break;
             }
             break;
         case '>':
             switch (data[1])
             {
-            case 'p': case 'P': r_key = KEY_MASK_Right; press = true;
-            case '1': keys_data.Right = 1; break;
-            case '0': keys_data.Right = 0; break;
+            case 'p': case 'P': r_key = KEY_MASK_Right; press = true; __attribute__ ((fallthrough));
+            case '1': _keys_data.Right = 1; break;
+            case '0': _keys_data.Right = 0; break;
             default: ESP_LOGI(TAG, "Right error: %c(0x%X)", data[1], data[1]); break;
             }
             break;
         case '<':
             switch (data[1])
             {
-            case 'p': case 'P': r_key = KEY_MASK_Left; press = true;
-            case '1': keys_data.Left = 1; break;
-            case '0': keys_data.Left = 0; break;
+            case 'p': case 'P': r_key = KEY_MASK_Left; press = true; __attribute__ ((fallthrough));
+            case '1': _keys_data.Left = 1; break;
+            case '0': _keys_data.Left = 0; break;
             default: ESP_LOGI(TAG, "Left error: %c(0x%X)", data[1], data[1]); break;
             }
             break;
@@ -162,9 +186,9 @@ static void _uart_rx_task()
         case 'H':
             switch (data[1])
             {
-            case 'p': case 'P': r_key = KEY_MASK_Home; press = true;
-            case '1': keys_data.Home = 1; break;
-            case '0': keys_data.Home = 0; break;
+            case 'p': case 'P': r_key = KEY_MASK_Home; press = true; __attribute__ ((fallthrough));
+            case '1': _keys_data.Home = 1; break;
+            case '0': _keys_data.Home = 0; break;
             default: ESP_LOGI(TAG, "Home error: %c(0x%X)", data[1], data[1]); break;
             }
             break;
@@ -172,19 +196,19 @@ static void _uart_rx_task()
         case 'C':
             switch (data[1])
             {
-            case 'p': case 'P': r_key = KEY_MASK_Capture; press = true;
-            case '1': keys_data.Capture = 1; break;
-            case '0': keys_data.Capture = 0; break;
-            default: ESP_LOGI(TAG, "Capture error: %c(0x%X)", data[1], data[1]); break;
+            case 'p': case 'P': r_key = KEY_MASK_Capture; press = true; __attribute__ ((fallthrough));
+            case '1': _keys_data.Capture = 1; break;
+            case '0': _keys_data.Capture = 0; break;
+            default: ESP_LOGW(TAG, "Capture error: %c(0x%X)", data[1], data[1]); break;
             }
             break;
         case 'l':
         case 'L':
             switch (data[1])
             {
-            case 'p': case 'P': r_key = KEY_MASK_L; press = true;
-            case '1': keys_data.L = 1; break;
-            case '0': keys_data.L = 0; break;
+            case 'p': case 'P': r_key = KEY_MASK_L; press = true; __attribute__ ((fallthrough));
+            case '1': _keys_data.L = 1; break;
+            case '0': _keys_data.L = 0; break;
             case 'r':
             case 'R':
                 switch (data[2])
@@ -195,24 +219,24 @@ static void _uart_rx_task()
                     case Left_Joycon:  r_key = KEY_MASK_Left_SL | KEY_MASK_Left_SR; break;
                     case Right_Joycon: r_key = KEY_MASK_Right_SL | KEY_MASK_Right_SR; break;
                     case Switch_pro:   r_key = KEY_MASK_L | KEY_MASK_R; break;
-                    default: break;
+                    default: ESP_LOGW(TAG, "L & R error: %c(0x%X)", data[2], data[2]); break;
                     }
-                    press = true;
+                    press = true; __attribute__ ((fallthrough));
                 case '1': 
                     switch (_joy_type)
                     {
-                    case Left_Joycon:  keys_data.Left_SL = 1; keys_data.Left_SR = 1; break;
-                    case Right_Joycon: keys_data.Right_SL = 1; keys_data.Right_SR = 1; break;
-                    case Switch_pro:   keys_data.L = 1; keys_data.R = 1; break;
+                    case Left_Joycon:  _keys_data.Left_SL = 1; _keys_data.Left_SR = 1; break;
+                    case Right_Joycon: _keys_data.Right_SL = 1; _keys_data.Right_SR = 1; break;
+                    case Switch_pro:   _keys_data.L = 1; _keys_data.R = 1; break;
                     default: break;
                     }
                     break;
                 case '0': 
                     switch (_joy_type)
                     {
-                    case Left_Joycon:  keys_data.Left_SL = 0; keys_data.Left_SR = 0; break;
-                    case Right_Joycon: keys_data.Right_SL = 0; keys_data.Right_SR = 0; break;
-                    case Switch_pro:   keys_data.L = 0; keys_data.R = 0; break;
+                    case Left_Joycon:  _keys_data.Left_SL = 0; _keys_data.Left_SR = 0; break;
+                    case Right_Joycon: _keys_data.Right_SL = 0; _keys_data.Right_SR = 0; break;
+                    case Switch_pro:   _keys_data.L = 0; _keys_data.R = 0; break;
                     default: break;
                     }
                     break;
@@ -223,9 +247,9 @@ static void _uart_rx_task()
             case 'S':
                 switch (data[2])
                 {
-                case 'p': case 'P': r_key = KEY_MASK_L_Stick; press = true;
-                case '1': keys_data.LStick = 1; break;
-                case '0': keys_data.LStick = 0; break;
+                case 'p': case 'P': r_key = KEY_MASK_L_Stick; press = true; __attribute__ ((fallthrough));
+                case '1': _keys_data.LStick = 1; break;
+                case '0': _keys_data.LStick = 0; break;
                 default: ESP_LOGI(TAG, "L Stick error: %c(0x%X)", data[2], data[2]); break;
                 }
                 break;
@@ -236,16 +260,16 @@ static void _uart_rx_task()
         case 'R':
             switch (data[1])
             {
-            case 'p': case 'P': r_key = KEY_MASK_R; press = true;
-            case '1': keys_data.Capture = 1; break;
-            case '0': keys_data.Capture = 0; break;
+            case 'p': case 'P': r_key = KEY_MASK_R; press = true; __attribute__ ((fallthrough));
+            case '1': _keys_data.Capture = 1; break;
+            case '0': _keys_data.Capture = 0; break;
             case 's':
             case 'S':
                 switch (data[2])
                 {
-                case 'p': case 'P': r_key = KEY_MASK_R_Stick; press = true;
-                case '1': keys_data.RStick = 1; break;
-                case '0': keys_data.RStick = 0; break;
+                case 'p': case 'P': r_key = KEY_MASK_R_Stick; press = true; __attribute__ ((fallthrough));
+                case '1': _keys_data.RStick = 1; break;
+                case '0': _keys_data.RStick = 0; break;
                 default: ESP_LOGI(TAG, "R Stick error: %c(0x%X)", data[2], data[2]); break;
                 }
                 break;
@@ -258,13 +282,13 @@ static void _uart_rx_task()
             break;
         }
 
-        NS_Set_Buttons(&keys_data);
+        NS_Set_Buttons(&_keys_data);
 
         if (press) 
         {
-            vTaskDelay(100);
+            vTaskDelay(20);
             UART_RES_KEY(r_key);
-            NS_Set_Buttons(&keys_data); 
+            NS_Set_Buttons(&_keys_data); 
         }
         ESP_LOGI(TAG, "heap free: %d", xPortGetFreeHeapSize());
     }
@@ -273,5 +297,6 @@ static void _uart_rx_task()
 void UART_0_Rx_Start(void)
 {
     // TODO: 检查官方的AT 命令是否启用
-    xTaskCreatePinnedToCore(_uart_rx_task, "uart_rx_task", 2048, NULL, 10, NULL, 1);
+    
+    xTaskCreate(_uart_rx_task, "uart_rx_task", 2048, NULL, 10, NULL);
 }
