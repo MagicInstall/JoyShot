@@ -9,18 +9,26 @@
 #include <string.h>
 #include "buttons.h"
 #include "esp_log.h"
+#include "freertos/queue.h"
 
 typedef struct
 {
     // gpio_num_t              gpio_num;       // 引脚号
-    Button_Config_t         button_config;    // 引脚配置
+    Button_Config_t         button_config;  // 引脚配置
     esp_timer_handle_t      timer_handle;   // 定时器
+    QueueHandle_t 			queue;          // 事件队列
     bool                    holding;        // 按住
-    // Button_Event_Callback   callback;       // 事件回调
+    // Button_Callback   callback;       // 事件回调
 } _Button_Class_t;
 
 _Button_Class_t *_buttons[BUTTON_COUNT_MAX];
 uint8_t          _button_cnt = 0;
+
+static void _btn_task(void *param) {
+    while (1) {
+
+    }
+}
 
 /// 所有定时器统一进这个中断
 static void _btn_timer_cb(void *arg) 
@@ -34,7 +42,9 @@ static void _btn_timer_cb(void *arg)
         {
             // 触发松开
             esp_timer_stop(btn->timer_handle);
-            btn->button_config.callback(Button_Event_Off);
+            // TODO: 改为消息通知另一个线程
+            // xTaskCreatePinnedToCore
+            // btn->button_config.callback(Button_Event_Off);
             btn->holding = false; // 在运行完callback 后才清除, 保证callback 能完成长时间运行的脚本!
         }
     }
@@ -50,7 +60,8 @@ static void _btn_timer_cb(void *arg)
 
         // 触发按下
         btn->holding = true;
-        btn->button_config.callback(Button_Event_On);
+        // TODO: 改为消息通知另一个线程
+        // btn->button_config.callback(Button_Event_On);
     }
 }
 
@@ -66,7 +77,7 @@ static void IRAM_ATTR _btn_isr_handler(void* arg)
     // esp_timer_stop(timer_handle);
     // *check = 0;
     // ((_Button_Class_t *)arg)->holding = false;
-    esp_timer_start_periodic(timer_handle, BUTTON_DEFAULT_DEBOUNCE);
+    esp_timer_start_periodic(timer_handle, BUTTON_DEBOUNCE);
 }
 
 // TODO: 目前未实现重复启动按键检测
@@ -91,7 +102,7 @@ Button_Handle_t Button_Enable(Button_Config_t *config)
         esp_timer_create_args_t timer_arg = {
             .callback = &_btn_timer_cb,
             .arg = (void *) new_btn,
-            .name = "BtnTimer" 
+            .name = "BtnTimer",
         };
         if (esp_timer_create(&timer_arg, &(new_btn->timer_handle)) != ESP_OK)
         {
@@ -161,7 +172,7 @@ static void _button_callback_disable(Button_Handle_t handle)
     return;
 }
 
-esp_err_t Button_Set_Callback(Button_Handle_t handle, Button_Event_Callback cb)
+esp_err_t Button_Set_Callback(Button_Handle_t handle, Button_Callback cb)
 {
     // 检查handle 
     int btn_idx = _search_button_index(handle);
@@ -179,8 +190,7 @@ esp_err_t Button_Set_Callback(Button_Handle_t handle, Button_Event_Callback cb)
     if (cb != NULL){
         btn->button_config.callback = cb;
         
-        gpio_install_isr_service(0/*目前使用默认标志*/);
-        ESP_LOGI("Button", "↑ No need to care about 'GPIO isr service already installed' ↑");
+        gpio_install_isr_service(ESP_INTR_FLAG_LEVEL6/*较高优先级*/);
 
         esp_err_t rst;
         rst = gpio_set_intr_type(btn->button_config.gpio_num, 
