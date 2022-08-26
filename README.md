@@ -26,6 +26,8 @@ echo LR1 > /dev/cu.usbserial-14401<br/>
 (7147) BT_HIDD: hidd_conn_disconnect: already disconnected<br/>
 ，感觉这个状况可能大概可以做home 键唤醒，但目前还没有头绪...；<br/>
 -- 蓝牙部分拆分到另一个文件，再包装了一层。
+* 2022-08-27 Wing<br/>
+基本完成WS2812 和CPC4051 的驱动；封装了光污染。<br/>
 
 # 目标（按顺序）
 * OTA；
