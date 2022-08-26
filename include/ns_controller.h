@@ -113,6 +113,9 @@ typedef enum {
     NS_CONTROLLER_DISCONNECTED_EVT,
 
 
+    NS_CONTROLLER_PLAYER_LIGHTS_EVT,
+
+
 } NS_CONTROLLER_EVT;
 
 typedef union
@@ -121,7 +124,11 @@ typedef union
     {
         esp_bd_addr_t   addr;        // 远程设备的地址
     } Scanned_device;
-    
+
+    struct
+    {
+        uint8_t         player;     // 1 - 4 号
+    } Player_Lights;    
 } NS_CONTROLLER_EVT_ARG_t;
 
 
