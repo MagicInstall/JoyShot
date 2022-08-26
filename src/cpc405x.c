@@ -152,22 +152,26 @@ static void IRAM_ATTR _charge_isr_handler(void* arg)
 static void _charge_task(void *param) {
 	ESP_ERROR_CHECK(param == NULL);
 	// CPC405x_Battery_Config_t *config = (CPC405x_Battery_Config_t *)param;
-	uint8_t ent_val;
+	uint8_t ent_val, last_val = 2/*让第一次判断ent_val必定不等于*/;
 	BaseType_t res;
 	while (1)
 	{
 		res = xQueueReceive(_charge_ent_queue, &ent_val, portMAX_DELAY);
 		if (res == pdTRUE) {
-			// 先跳过1 Tick的时间
+			// 先跳过1 Tick的时间当作消抖
 			vTaskDelay(1);
 			ent_val = gpio_get_level(_battery_config.status_io_num) == 0 ? 
 							CPC405X_CHARGE_EVENT_CHARGING : 
 							CPC405X_CHARGE_EVENT_UNCHARG;
 
-			ESP_LOGI(TAG, "%s event",   ent_val == CPC405X_CHARGE_EVENT_CHARGING?
-										"Charging" :
-										"Uncharge");
-			_battery_config.charge_cb(ent_val);
+			// 防止重复触发同一个事件
+			if (ent_val != last_val) {
+				last_val = ent_val;
+				ESP_LOGI(TAG, "%s event",   ent_val == CPC405X_CHARGE_EVENT_CHARGING?
+											"Charging" :
+											"Uncharge");
+				_battery_config.charge_cb(ent_val);
+			}
 		}
 		// TODO：测试用
 		else {
@@ -182,7 +186,7 @@ static void _charge_task(void *param) {
 // 直接位移就能求出平均数。
 static void _adc_task(void *param) {
 	ESP_ERROR_CHECK(param == NULL);
-	// static const TickType_t per_min = 60 * 1000 / portTICK_RATE_MS;
+	static const TickType_t per_min = 60 * 1000 / portTICK_RATE_MS;
 	CPC405x_Battery_Config_t *config = (CPC405x_Battery_Config_t *)param;
 	ESP_ERROR_CHECK(config->level_cb == NULL);
 
@@ -210,8 +214,8 @@ static void _adc_task(void *param) {
 		ESP_LOGI(TAG, "ADC: %d", val);
 		if (val != last) config->level_cb(val);
 		last = val;
-		// vTaskDelay(config->adc_interval * per_min);
-		vTaskDelay(5000 / portTICK_RATE_MS); // TODO: 测试用
+		vTaskDelay(config->adc_interval * per_min);
+		// vTaskDelay(5000 / portTICK_RATE_MS); // 测试用
 	}
 }
 
