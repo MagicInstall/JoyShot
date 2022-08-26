@@ -295,8 +295,10 @@ esp_err_t Lamp_Effect_Start(Lamp_Effect_t *effect) {
 	//----------------------------------------------------
 	//-- 注意后面是操作内部的_effect对象，不是参数的 effect ！ --
 
+
 	// 等待一个正在输出的帧完成
-	xSemaphoreTake((_effect ? _effect : effect)->semaphore, portMAX_DELAY);
+	Lamp_Effect_t *last_eff = _effect;
+	if (last_eff) xSemaphoreTake(last_eff->semaphore, portMAX_DELAY);
 
 	// 更新光效数据的指针
 	_effect = effect;
@@ -304,9 +306,10 @@ esp_err_t Lamp_Effect_Start(Lamp_Effect_t *effect) {
 	// 先输出第一帧到缓冲区
 	ESP_ERROR_CHECK(WS2812_Fill_Buffer(_effect->table + _effect->frames[_effect->current], WS2812_COUNT));
 
-	xSemaphoreGive(_effect->semaphore);
+	if (last_eff) xSemaphoreGive(last_eff->semaphore);
 
-	return WS2812_Loop_Start(_effect->freq, _effect_task);
+	ret = WS2812_Loop_Start(_effect->freq, _effect_task);
+	return ret;
 	// esp_err_t ret = WS2812_Loop_Start(_effect->freq, _effect_task);
 	// if (ret != ESP_OK) return ret;
 
